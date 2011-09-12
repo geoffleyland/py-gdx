@@ -73,15 +73,19 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    parser = optparse.OptionParser(usage = "%prog [options] <input gdx> <input csv>")
-    parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory", default=None)
-    parser.add_option("-o", "--output", help="Where to write the output file (defaults to overwriting input)", default=None)
+    parser = optparse.OptionParser(usage =
+"""python %prog [options] <input gdx> <input csv>
+Insert data in a csv file into a gdx file.
+""")
     parser.add_option("-n", "--symbol-name", help="The name of the symbol to create (defaults the name of the csv file minus its suffix)", default=None)
     parser.add_option("-d", "--description", help="The description of the symbol", default=None)
 
     parser.set_defaults(type="Parameter")
     parser.add_option("-p", "--parameter", action="store_const", dest="type", const="Parameter", help="The symbol to be added is a parameter (default)")
     parser.add_option("-s", "--set", action="store_const", dest="type", const="Set", help="The symbol to be added is a set")
+
+    parser.add_option("-o", "--output", help="Where to write the output file (defaults to overwriting input)", default=None)
+    parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
         options, args = parser.parse_args(argv)
