@@ -81,8 +81,11 @@ def write_report(files, symbol_names, output=None, gams_dir=None):
         symbols = gdxdict.read(f, gams_dir)
         for sn in symbol_names:
             if sn in symbols:
-                n, dummy = os.path.splitext(os.path.basename(f))
-                header = n + ": " + sn
+                if len(files) > 1:
+                    n, dummy = os.path.splitext(os.path.basename(f))
+                    header = n + ": " + sn
+                else:
+                    header = sn
                 header_map[header] = True
                 s = symbols[sn]
                 typename, typecode = gdxdict.get_type(symbols, sn)
@@ -133,7 +136,7 @@ or more gdx files.
 
 Examples:
 python %prog -f days.gdx -s daynumber -s isweekend
-Key, days: daynumber, days: isweekend
+Key, daynumber, isweekend
 Monday, 1,
 Tuesday, 2,
 ...
