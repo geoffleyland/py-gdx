@@ -126,12 +126,31 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    parser = optparse.OptionParser(usage = "%prog [options]")
-    parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory", default=None)
-    parser.add_option("-o", "--output", help="Where to write the output csv file (default is stdout)", default=None)
-    parser.add_option("-f", "--file", help="Add a gdx file to merge from", action="append", dest="files")
-    parser.add_option("-d", "--directory", help="Add a directory to merge from", action="append", dest="directories")
+    parser = optparse.OptionParser(usage =
+"""python %prog [options]
+Produce a csv file containing the values of selected sets or parameters from one
+or more gdx files.
+
+Examples:
+python %prog -f days.gdx -s daynumber -s isweekend
+Key, days: daynumber, days: isweekend
+Monday, 1,
+Tuesday, 2,
+...
+Saturday, 6, X
+Sunday, 7, X
+
+python %prog -f gdp_1973.gdx -f gdp_2003.gdx -s gdp
+Key, gdp_1973: gdp, gdp_2003: gdp
+Austria, 82227, 173311
+Belgium, 118526, 219069
+Denmark, 70032, 124781
+""")
+    parser.add_option("-f", "--file", help="Add a gdx file to read from", action="append", dest="files")
+    parser.add_option("-d", "--directory", help="Add a directory to read several gdx files from", action="append", dest="directories")
     parser.add_option("-s", "--symbol", help="Add a symbol to the report", action="append", dest="symbols")
+    parser.add_option("-o", "--output", help="Where to write the output csv file (default is to the console)", default=None)
+    parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
         options, args = parser.parse_args(argv)
