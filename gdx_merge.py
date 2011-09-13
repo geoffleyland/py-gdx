@@ -41,6 +41,7 @@ def merge_gdx(input_gdx_1, input_gdx_2, output_gdx=None, gams_dir=None):
     symbols_1 = gdxdict.read(input_gdx_1, gams_dir)
     symbols_2 = gdxdict.read(input_gdx_2, gams_dir)
 
+    gdxdict.merge_UELs(symbols_1, symbols_2)
     traverse(symbols_1, symbols_2)
 
     gdxdict.write(symbols_1, output_gdx, gams_dir)
@@ -68,7 +69,7 @@ def main(argv=None):
         if not output_gdx:
             output_gdx = input_gdx_1
         
-        print "Reading gdx from '%s' and '%s' and writing to '%s'" % (input_gdx_1, input_gdx_1, output_gdx)
+        print "Reading gdx from '%s' and '%s' and writing to '%s'" % (input_gdx_1, input_gdx_2, output_gdx)
         
         merge_gdx(input_gdx_1, input_gdx_2, output_gdx, options.gams_dir)
 
