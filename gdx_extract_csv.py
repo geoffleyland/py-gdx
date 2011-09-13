@@ -77,8 +77,15 @@ def write_report(files, symbol_names, output=None, gams_dir=None):
     header_map = {}
     values = {}
 
+    symbols1 = None
+
     for f in files:
         symbols = gdxdict.read(f, gams_dir)
+        if not symbols1:
+            symbols1 = symbols
+        else:
+            gdxdict.merge_UELs(symbols1, symbols)
+
         for sn in symbol_names:
             if sn in symbols:
                 if len(files) > 1:
@@ -96,9 +103,15 @@ def write_report(files, symbol_names, output=None, gams_dir=None):
                         write_parameter(s, header, row_map, values, "set")
                 else:
                     write_parameter(s, header, row_map, values)
-                
+
+    uel_dict = symbols1["__universal_dict"]
     rows = []
-    for r in row_map: rows.append(r)
+    for r in row_map:
+        names = r.split(".")
+        nums = ()
+        for n in names:
+            nums = nums + (uel_dict[n],)
+        rows.append((nums, r))
     rows.sort()
     headers = []
     for h in header_map: headers.append(h)
@@ -108,11 +121,12 @@ def write_report(files, symbol_names, output=None, gams_dir=None):
     for h in headers: output.write(", %s" % h)
     output.write("\n")
     for r in rows:
-        output.write(r)
+        name = r[1]
+        output.write(name)
         for h in headers:
             output.write(", ")
-            if r in values and h in values[r]:
-                v = values[r][h]
+            if name in values and h in values[name]:
+                v = values[name][h]
                 if type(v) == float:
                     output.write("%g" % v)
                 elif type(v) == bool:
