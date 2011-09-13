@@ -80,8 +80,32 @@ def read(filename, gams_dir):
     symbol_info = {}
     symbols["__symbol_info"] = symbol_info
 
+    # read the universal set
+    universal_dict = {}
+    universal_order = []
+    universal_desc = []
+    symbols["__universal_dict"] = universal_dict
+    symbols["__universal_order"] = universal_order
+    symbols["__universal_desc"] = universal_desc
+    sinfo = gdxx.symbol_info(H, 0)
+    symbol_info["__universal"] = {}
+    for k in sinfo:
+        symbol_info["__universal"][k] = sinfo[k]
+    ok, records = gdxcc.gdxDataReadStrStart(H, 0)
+        
+    for i in range(records):
+        ok, elements, values, afdim = gdxcc.gdxDataReadStr(H)
+        if not ok: raise gdxx.GDX_error(H, "Error in gdxDataReadStr")
+        key = elements[0]
+        ret, description, node = gdxcc.gdxGetElemText(H, int(values[gdxcc.GMS_VAL_LEVEL]))
+        if ret == 0: description = None
+        universal_dict[key] = i
+        universal_order.append(key)
+        universal_desc.append(description)
+
+    # Read all the other symbols
     for i in range(1, info["symbol_count"]+1):
- 
+
         sinfo = gdxx.symbol_info(H, i)
         symbol_info[sinfo["name"]] = {}
         for k in sinfo:
@@ -138,6 +162,7 @@ def set_symbol(H, d, name, typename, userinfo, values, dims):
 
     gdxcc.gdxDataWriteStr(H, dims + [name], values)
 
+
 def write_symbol(H, typename, userinfo, s, dims):
     for k in s:
         if k.startswith("__"): continue
@@ -153,6 +178,12 @@ def write(symbols, filename, gams_dir):
     assert gdxcc.gdxOpenWrite(H, filename, "gdxdict.py")[0], "Couldn't open %s" % filename
 
     symbol_info = symbols["__symbol_info"]
+
+    # write the universal set
+    gdxcc.gdxUELRegisterRawStart(H)
+    for i in range(len(symbols["__universal_order"])):
+        gdxcc.gdxUELRegisterRaw(H, symbols["__universal_order"][i])
+    gdxcc.gdxUELRegisterDone(H)
 
     for k in symbols:
         if k.startswith("__"): continue
@@ -174,6 +205,17 @@ def write(symbols, filename, gams_dir):
 
 
 #- Setting symbol info ---------------------------------------------------------
+
+def add_UEL(symbols, name, description):
+    if name not in symbols["__universal_dict"]:
+        symbols["__universal_dict"][name] = len(symbols["__universal_order"])
+        symbols["__universal_order"].append(name)
+        symbols["__universal_desc"].append(description)
+
+
+def merge_UELs(s1, s2):
+    for i in range(len(s2["__universal_order"])):
+        add_UEL(s1, s2["__universal_order"][i], s2["__universal_desc"][i])
 
 
 def get_symbol_info(symbols, name):
