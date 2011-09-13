@@ -95,15 +95,17 @@ def symbol_info(H, num):
         full_typename = variable_type_text[userinfo] + " "
     full_typename += typename
 
-    ret, gdx_domain = gdxcc.gdxSymbolGetDomain(H, num)
     domain = {}
-    for i in range(0, dims):
-        d = gdx_domain[i]
-        domain[i] = { "index": d }
-        if d == 0:
-            domain[i]["key"] = "*"
-        else:
-            ret, domain[i]["key"], dummy1, dummy2 = gdxcc.gdxSymbolInfo(H, d)
+    if dims > 0 and num > 0:
+        ret, gdx_domain = gdxcc.gdxSymbolGetDomain(H, num)
+        if ret != 1: raise GDX_error(H, "Couldn't get symbol domain")
+        for i in range(dims):
+            d = gdx_domain[i]
+            domain[i] = { "index": d }
+            if d == 0:
+                domain[i]["key"] = "*"
+            else:
+                ret, domain[i]["key"], dummy1, dummy2 = gdxcc.gdxSymbolInfo(H, d)
 
     return {
       "name": name,
