@@ -12,7 +12,7 @@ There are several example scripts:
 - `gdx_merge.py` merges two GDX files *without* creating an extra index
 - `gdx_report.py` produces a CSV report of parameter and variable values in a GDX file
 
-In call cases use `python gdx_<example>.py --help` to find out to use them.
+In all cases use `python gdx_<example>.py --help` to find out how to use them.
 
 The above scripts use `gdxdict.py` to do their magic.  `gdxdict.py` loads a
 GDX file into a Python dictionary, and can write a GDX file from a dictionary.
