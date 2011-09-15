@@ -8,8 +8,14 @@ import os
 import optparse
 
 
-#- Replace a parameter with the contents of a csv file -------------------------
+#- Errors ----------------------------------------------------------------------
 
+class extract_error(Exception):
+     def __init__(self, msg):
+         self.msg = msg
+
+
+#- Replace a parameter with the contents of a csv file -------------------------
 
 def are_the_last_sets_unique(s, names={}, address=None):
     assert(type(s) == dict)
@@ -77,15 +83,56 @@ def write_report(files, symbol_names, output=None, gams_dir=None):
     header_map = {}
     values = {}
 
+    filesymbols = {}
     symbols1 = None
 
+    # Read all the symbols from all the files
     for f in files:
-        symbols = gdxdict.read(f, gams_dir)
+        filesymbols[f] = gdxdict.read(f, gams_dir)
         if not symbols1:
-            symbols1 = symbols
+            symbols1 = filesymbols[f]
         else:
-            gdxdict.merge_UELs(symbols1, symbols)
+            gdxdict.merge_UELs(symbols1, filesymbols[f])
 
+    # Check the domains of all the symbols
+    potential_domains = []
+    for sn in symbol_names:
+        for f in files:
+            info = gdxdict.get_symbol_info(filesymbols[f], sn)
+            for d in range(info["dims"]):
+                if d >= len(potential_domains):
+                    pd = {}
+                    potential_domains.append(pd)
+                    for a in info["domain"][d]["ancestors"]:
+                        if a != "*":
+                            pd[a] = gdxdict.get_symbol_info(filesymbols[f], a)["records"]
+                else:
+                    pd = potential_domains[d]
+                    sd = {}
+                    for a in info["domain"][d]["ancestors"]:
+                        sd[a] = gdxdict.get_symbol_info(filesymbols[f], a)["records"]
+                    remove = []
+                    for a in pd:
+                        if a in sd:
+                            pd[a] = max(sd[a], pd[a])
+                        else:
+                            remove.append(a)
+                    for r in remove: del pd[r]
+
+    domains = []
+    for pd in potential_domains:
+        if len(pd) == 0:
+            raise extract_error("Domains of the symbols do not match: you need to run the script more than once to generate more than one CSV file")
+        smallest_set = None
+        least = 1e9
+        for s in pd:
+            if pd[s] < least:
+                least = pd[s]
+                smallest_set = s
+        domains.append(smallest_set)
+
+    for f in files:
+        symbols = filesymbols[f]
         for sn in symbol_names:
             if sn in symbols:
                 if len(files) > 1:
@@ -200,6 +247,9 @@ Denmark, 70032, 124781
         print >>sys.stderr, "GDX Error: %s" % err.msg
         if err.msg == "Couldn't find the GAMS system directory":
             print "  Try specifying where GAMS is with the -g option"
+        return 2
+    except extract_error, err:
+        print >>sys.stderr, "Error: %s" % err.msg
         return 2
 
     return 1
