@@ -127,11 +127,33 @@ def guess_domains(symbols):
                     # contains all the keys that appear in this dimension
                     smallest_set = None
                     length = 1e9 # Can you get DBL_MAX in Python?  A billion out to be enough for anyone.
+                    min_length = 0
+                    # If we're working with a set, we don't want to pick a set
+                    # with the exact same length - we want this to be a subset
+                    # of a longer set
+                    if info["type"] == gdxcc.GMS_DT_SET:
+                        min_length = len(keys[i])
                     for s in pd:
-                        if len(symbols[s]) < length:
-                            length = len(symbols[s])
+                        l = symbol_info[s]["records"]
+                        if l < length and l > min_length:
+                            length = l
                             smallest_set = s
-                    info["domain"][i] = { "index":symbol_info[smallest_set]["number"], "key":smallest_set }
+                    if smallest_set:
+                        info["domain"][i] = { "index":symbol_info[smallest_set]["number"], "key":smallest_set }
+
+
+def guess_ancestor_domains(symbols):
+    symbol_info = symbols["__symbol_info"]
+    set_map = {}
+    for k in symbols:
+        if k.startswith("__"): continue
+        info = symbol_info[k]
+        if info["dims"] == 0: continue
+        for i in range(info["dims"]):
+            ancestors = [info["domain"][i]["key"]]
+            while ancestors[-1] != '*':
+                ancestors.append(symbol_info[ancestors[-1]]["domain"][0]["key"])
+            info["domain"][i]["ancestors"] = ancestors
 
 
 def read(filename, gams_dir):
@@ -203,6 +225,7 @@ def read(filename, gams_dir):
     gdxcc.gdxFree(H)
 
     guess_domains(symbols)
+    guess_ancestor_domains(symbols)
 
     return symbols
 
@@ -291,13 +314,23 @@ def get_symbol_info(symbols, name):
     if not "__symbol_info" in symbols:
         symbols["__symbol_info"] = {}
     if not name in symbols["__symbol_info"]:
-        symbols["__symbol_info"][name] = {
-            "dims": 0,
-            "type": gdxcc.GMS_DT_PAR,
-            "typename": "Parameter",
-            "description": "",
-            "userinfo": 0
-          }
+        if name == '*':
+            symbols["__symbol_info"][name] = {
+                "dims": 1,
+                "type": gdxcc.GMS_DT_SET,
+                "typename": "Set",
+                "description": "",
+                "userinfo": 0,
+                "records": len(symbols["__universal_order"])
+                }
+        else:
+            symbols["__symbol_info"][name] = {
+                "dims": 0,
+                "type": gdxcc.GMS_DT_PAR,
+                "typename": "Parameter",
+                "description": "",
+                "userinfo": 0
+                }
     return symbols["__symbol_info"][name]
 
 
