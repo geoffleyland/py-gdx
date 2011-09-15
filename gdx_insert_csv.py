@@ -18,52 +18,63 @@ class csv_error(Exception):
 
 #- Replace a parameter with the contents of a csv file -------------------------
 
-def replace_symbol(input_gdx, input_csv, symbol_name, symbol_type, description=None, output_gdx=None, gams_dir=None):
-    if symbol_name == None: symbol_name, dummy = os.path.splitext(os.path.basename(input_csv))
+def insert_symbol(symbols, input_csv):
+    reader = csv.reader(open(input_csv))
+
+    header = reader.next()
+    domains = header[0].split(".")
+    symbol_names = header[1:]
+
+    for s in symbol_names:
+        if not s in symbols:
+            symbols[s] = {}
+            info = gdxdict.get_symbol_info(symbols, s)
+            info["dims"] = len(domains)
+            nd = []
+            info["domains"] = nd
+            for d in domains:
+                nd.append({"key": d})
+        else:
+            current_domains = gdxdict.get_symbol_info(symbols, s)["domain"]
+            if len(current_domains) != len(domains):
+                raise csv_error("Inconsistent symbol dimensions")
+            for i in range(len(domains)):
+                if domains[i] != current_domains[i]["key"]:
+                    raise csv_error("Inconsistent symbol dimensions")
+
+    for row in reader:
+        keys = row[0].split(".")
+        values = row[1:]
+        for i in range(len(values)):
+            name = symbol_names[i]
+            value = values[i]
+            symbol = symbols[name]
+            for j in range(len(keys)):
+                k = keys[j]
+                if j == len(keys)-1:
+                    if value.upper == "YES" or value.upper == "NO":
+                        if value.upper == "YES":
+                            symbols[k] = True
+                        else:
+                            if k in symbols: del symbols[k]
+                        gdxdict.set_type(symbols, name, "Set")
+                    else:
+                        symbol[k] = float(value)
+                        gdxdict.set_type(symbols, name, "Parameter")
+                else:
+                    if not k in symbol:
+                        symbol[k] = {}
+                    symbol = symbol[k]
+
+
+def insert_symbols(input_gdx, input_csvs, output_gdx=None, gams_dir=None):
     if output_gdx == None: output_gdx = input_gdx
 
     symbols = gdxdict.read(input_gdx, gams_dir)
 
-    dims = None
-    if not symbol_name in symbols:
-        symbols[symbol_name] = {}
-        gdxdict.set_type(symbols, symbol_name, symbol_type)
-    else:
-        dims = gdxdict.get_dims(symbols, symbol_name)
-        typename, typecode = gdxdict.get_type(symbols, symbol_name)
-        if typename != symbol_type:
-            print(typename, symbol_type)
-            raise gdxx.GDX_error(None, "Inconsistent symbol types")
+    for c in input_csvs:
+        insert_symbol(symbols, c)
 
-    if description:
-        gdxdict.set_description(symbols, symbol_name, desc)
-
-    offset = 1
-    if symbol_type == "Set": offset = 0
-
-    symbol = symbols[symbol_name]
-    reader = csv.reader(open(input_csv))
-    for row in reader:
-        current = symbol
-        l = len(row)
-        if dims == None:
-            dims = l-offset
-        elif l-offset != dims:
-            raise csv_error("Inconsistent dimensions for variable")
-
-        for c in range(l-offset):
-            v = row[c]
-            if c == l - offset - 1:
-                if symbol_type == "Parameter":
-                    current[v] = float(row[c+1])
-                else:
-                    current[v] = True
-            else:
-                if not v in current:
-                    current[v] = {}
-                current = current[v]
-
-    gdxdict.set_dims(symbols, symbol_name, dims)
     gdxdict.write(symbols, output_gdx, gams_dir)
 
 
@@ -74,39 +85,24 @@ def main(argv=None):
         argv = sys.argv
 
     parser = optparse.OptionParser(usage =
-"""python %prog [options] <input gdx> <input csv>
+"""python %prog [options] <input gdx> <input csv1> [<input csv2>] ...
 Insert data in a csv file into a gdx file.
 """)
-    parser.add_option("-n", "--symbol-name", help="The name of the symbol to create (defaults the name of the csv file minus its suffix)", default=None)
-    parser.add_option("-d", "--description", help="The description of the symbol", default=None)
-
-    parser.set_defaults(type="Parameter")
-    parser.add_option("-p", "--parameter", action="store_const", dest="type", const="Parameter", help="The symbol to be added is a parameter (default)")
-    parser.add_option("-s", "--set", action="store_const", dest="type", const="Set", help="The symbol to be added is a set")
-
     parser.add_option("-o", "--output", help="Where to write the output file (defaults to overwriting input)", default=None)
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
         options, args = parser.parse_args(argv)
 
-        if len(args) != 3:
-            parser.error("Wrong number of arguments (try python %s --help)" % args[0])
-
         input_gdx = args[1]
-        input_csv = args[2]
-        symbol_name = options.symbol_name
-        if not symbol_name:
-            symbol_name, dummy = os.path.splitext(os.path.basename(input_csv))
+        input_csvs = args[2:]
         output_gdx = options.output
         if not output_gdx:
             output_gdx = input_gdx
-        symbol_type = options.type
-        symbol_description = options.description
+
+        print "Reading gdx from '%s', adding data in %s, and writing to '%s'" % (input_gdx, input_csvs, output_gdx)
         
-        print "Reading gdx from '%s', adding data in '%s' as %s '%s', and writing to '%s'" % (input_gdx, input_csv, symbol_type, symbol_name, output_gdx)
-        
-        replace_symbol(input_gdx, input_csv, symbol_name, symbol_type, symbol_description, output_gdx, options.gams_dir)
+        insert_symbols(input_gdx, input_csvs, output_gdx, options.gams_dir)
 
     except (optparse.OptionError, TypeError), err:
         print >>sys.stderr, err
@@ -115,6 +111,9 @@ Insert data in a csv file into a gdx file.
         print >>sys.stderr, "GDX Error: %s" % err.msg
         if err.msg == "Couldn't find the GAMS system directory":
             print "  Try specifying where GAMS is with the -g option"
+        return 2
+    except csv_error, err:
+        print >>sys.stderr, "Error: %s" % err.msg
         return 2
 
     return 1

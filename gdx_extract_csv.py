@@ -132,9 +132,13 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
                     output.write("%g" % v)
                 elif type(v) == bool:
                     if v == True:
-                        output.write("X")
+                        output.write("YES")
+                    else:
+                        output.write("NO")
                 else:
                     output.write(v)
+            else:
+                output.write("NO")
         output.write("\n")
 
 
