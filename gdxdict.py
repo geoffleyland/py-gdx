@@ -67,6 +67,73 @@ def get_symbol(H, d, name, typename, values):
             d["__desc"][name] = description
 
 
+def visit_domains(current, keys, index):
+    for k in current:
+        if k.startswith("__"): continue
+        keys[index][k] = True
+        v = current[k]
+        if type(v) == dict:
+            visit_domains(v, keys, index+1)
+
+
+def guess_domains(symbols):
+    # We don't always get symbol domains from GDX (in 23.7.2 and below
+    # gdxSymbolGetDomain doesn't work and otherwise, some GDX files don't seem
+    # to contain this information).  So here we try to guess
+
+    symbol_info = symbols["__symbol_info"]
+
+    # First, find all the symbols in all the one-dimensional sets, but map it
+    # backwards so we have a map from every set key back to all the sets its in
+    set_map = {}
+    for k in symbols:
+        if k.startswith("__"): continue
+        info = symbol_info[k]
+        if info["type"] == gdxcc.GMS_DT_SET and info["dims"] == 1:
+            symbol = symbols[k]
+            for e in symbol:
+                if not e in set_map:
+                    set_map[e] = {}
+                set_map[e][k] = True
+
+    # Then run through all the symbols trying to guess any missing domains
+    for k in symbols:
+        if k.startswith("__"): continue
+        info = symbol_info[k]
+        if info["dims"] > 0:
+            keys = [{} for i in range(info["dims"])]
+            # Enumerate all the keys the symbol uses on each of its dimensions
+            visit_domains(symbols[k], keys, 0)
+            for i in range(info["dims"]):
+                if info["domain"][i]["key"] != "*": continue
+                # For each dimension that currently has '*' as it's domain,
+                # work out all the possible sets
+                pd = None
+                for j in keys[i]:
+                    if pd == None:
+                        pd = {}
+                        for s in set_map[j]: pd[s] = True
+                    else:
+                        remove = []
+                        for s in pd:
+                            if not s in set_map[j]: remove.append(s)
+                        for r in remove: del pd[r]
+
+                # If the symbol is a set itself, then we probably found that, but we don't want it
+                if pd and k in pd: del pd[k]
+                if pd and len(pd) > 0:
+                    # If we found more than one possible set, pick the shortest
+                    # one: our guess is that the set is the smallest set that
+                    # contains all the keys that appear in this dimension
+                    smallest_set = None
+                    length = 1e9 # Can you get DBL_MAX in Python?  A billion out to be enough for anyone.
+                    for s in pd:
+                        if len(symbols[s]) < length:
+                            length = len(symbols[s])
+                            smallest_set = s
+                    info["domain"][i] = { "index":symbol_info[smallest_set]["number"], "key":smallest_set }
+
+
 def read(filename, gams_dir):
     H = gdxx.open(gams_dir)
     assert gdxcc.gdxOpenRead(H, filename)[0], "Couldn't open %s" % filename
@@ -134,6 +201,8 @@ def read(filename, gams_dir):
 
     gdxcc.gdxClose(H)
     gdxcc.gdxFree(H)
+
+    guess_domains(symbols)
 
     return symbols
 
