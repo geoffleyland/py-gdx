@@ -42,6 +42,26 @@ default_variable_fields = [
 ]
 
 
+#- New symbol object without a file --------------------------------------------
+
+def new():
+    symbols = {}
+
+    symbol_info = {}
+    symbols["__symbol_info"] = symbol_info
+
+    # read the universal set
+    universal_dict = {}
+    universal_order = []
+    universal_desc = []
+    symbols["__universal_dict"] = {}
+    symbols["__universal_order"] = []
+    symbols["__universal_desc"] = []
+    symbol_info["__universal"] = {}
+
+    return symbols
+
+
 #- Read a GDX file -------------------------------------------------------------
 
 def get_symbol(H, d, name, typename, values):
@@ -239,7 +259,7 @@ values = gdxcc.doubleArray(gdxcc.GMS_VAL_MAX)
 def set_symbol(H, d, name, typename, userinfo, values, dims):
     if typename == "Set":
         text_index = 0
-        if typename == "Set" and "__desc" in d and name in d["__desc"]:
+        if "__desc" in d and name in d["__desc"]:
             ret, text_index = gdxcc.gdxAddSetText(H, d["__desc"][name])
         values[gdxcc.GMS_VAL_LEVEL] = float(text_index)
     else:

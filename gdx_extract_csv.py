@@ -5,6 +5,7 @@ import gdxx
 import gdxdict
 import sys
 import os
+import os.path
 import optparse
 import string
 
@@ -98,9 +99,9 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
                 s = symbols[sn]
                 typename, typecode = gdxdict.get_type(symbols, sn)
                 if typename == "Set":
-                    if gdxdict.get_dims(symbols, sn) > 1 and are_the_last_sets_unique(s):
-                        write_set(s, header, row_map, values)
-                    else:
+#                    if gdxdict.get_dims(symbols, sn) > 1 and are_the_last_sets_unique(s):
+#                        write_set(s, header, row_map, values)
+#                    else:
                         write_parameter(s, header, row_map, values, "set")
                 else:
                     write_parameter(s, header, row_map, values)
@@ -129,7 +130,7 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
             if name in values and h in values[name]:
                 v = values[name][h]
                 if type(v) == float:
-                    output.write("%g" % v)
+                    output.write("%.16g" % v)
                 elif type(v) == bool:
                     if v == True:
                         output.write("YES")
@@ -158,8 +159,6 @@ def read_files(files, gams_dir=None):
 
 
 def write_symbol_report(files, symbol_names, output=None, gams_dir=None):
-#    if not output: output = sys.stdout
-
     filesymbols, symbols1 = read_files(files, gams_dir)
 
     # Check the domains of all the symbols
@@ -241,6 +240,24 @@ def write_domain_report(files, domains, output=None, gams_dir=None):
     write_report(filesymbols, symbols1, domains, symbol_names, output)
 
 
+def write_all_reports(files, output, gams_dir=None):
+    try: os.makedirs(os.path.dirname(output))
+    except:
+        pass
+    
+    filesymbols, symbols = read_files(files, gams_dir)
+
+    # Find all the symbols that have the specified domains
+    for s in symbols:
+        if s.startswith("__"): continue
+        info = gdxdict.get_symbol_info(symbols, s)
+        if info["typename"] == "Scalar": continue
+        domains = []
+        for d in info["domain"]:
+            domains.append(d["key"])
+        write_report(filesymbols, symbols, domains, [s], open(output+s+".csv", "w"))
+
+
 #- main ------------------------------------------------------------------------
 
 def main(argv=None):
@@ -272,13 +289,14 @@ Denmark, 70032, 124781
     parser.add_option("-d", "--directory", help="Add a directory to read several gdx files from", action="append", dest="directories")
     parser.add_option("-s", "--symbol", help="Add a symbol to the report", action="append", dest="symbols")
     parser.add_option("-D", "--domain", help="Add a domain to the report", action="append", dest="domains")
+    parser.add_option("-a", "--all", help="Write all symbols", action="store_true")
     parser.add_option("-o", "--output", help="Where to write the output csv file (default is to the console)", default=None)
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
         options, args = parser.parse_args(argv)
 
-        if not options.domains and not options.symbols:
+        if not options.domains and not options.symbols and not options.all:
             parser.error("No symbols or domains specified (try python %s --help)" % args[0])
 
         files = options.files
@@ -294,13 +312,27 @@ Denmark, 70032, 124781
 
         if options.domains and options.symbols:
             print >>sys.stderr, "Both domain and symbol names specified: using domains and ignoring symbols"
+        if options.all and options.symbols:
+            print >>sys.stderr, "Both --all and symbol names specified: using --all"
+        if options.domains and options.all:
+            print >>sys.stderr, "Both domain names and --all specified: using --all"
+        
+        if options.all and len(files) > 1:
+            raise parser.error("You can only use one input file when using --all")
+        if options.all and not options.output:
+            raise parser.error("You must specify an output prefix or directory when using --all")
 
         if options.output:
-            outfile = open(options.output, "w")
+            if options.all:
+                outfile = options.output
+            else:
+                outfile = open(options.output, "w")
         else:
             outfile = sys.stdout
 
-        if options.domains:
+        if options.all:
+            write_all_reports(files, outfile, options.gams_dir)
+        elif options.domains:
             write_domain_report(files, options.domains, outfile, options.gams_dir)
         else:
             write_symbol_report(files, options.symbols, outfile, options.gams_dir)

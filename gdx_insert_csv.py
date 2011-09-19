@@ -19,11 +19,16 @@ class csv_error(Exception):
 #- Replace a parameter with the contents of a csv file -------------------------
 
 def insert_symbol(symbols, input_csv):
+    print "Reading from", input_csv
     reader = csv.reader(open(input_csv))
 
-    header = reader.next()
+    try: header = reader.next()
+    except: return
+
     domains = header[0].split(".")
-    symbol_names = header[1:]
+    symbol_names = []
+    for s in header[1:]:
+        symbol_names.append(s.strip())
 
     for s in symbol_names:
         if not s in symbols:
@@ -52,11 +57,12 @@ def insert_symbol(symbols, input_csv):
             for j in range(len(keys)):
                 k = keys[j]
                 if j == len(keys)-1:
-                    if value.upper == "YES" or value.upper == "NO":
-                        if value.upper == "YES":
-                            symbols[k] = True
+                    value = value.strip().upper()
+                    if value == "YES" or value == "NO":
+                        if value == "YES":
+                            symbol[k] = True
                         else:
-                            if k in symbols: del symbols[k]
+                            if k in symbol: del symbol[k]
                         gdxdict.set_type(symbols, name, "Set")
                     else:
                         symbol[k] = float(value)
@@ -67,10 +73,13 @@ def insert_symbol(symbols, input_csv):
                     symbol = symbol[k]
 
 
-def insert_symbols(input_gdx, input_csvs, output_gdx=None, gams_dir=None):
+def insert_symbols(input_csvs, input_gdx=None, output_gdx=None, gams_dir=None):
     if output_gdx == None: output_gdx = input_gdx
 
-    symbols = gdxdict.read(input_gdx, gams_dir)
+    if input_gdx:
+        symbols = gdxdict.read(input_gdx, gams_dir)
+    else:
+        symbols = gdxdict.new()
 
     for c in input_csvs:
         insert_symbol(symbols, c)
@@ -85,24 +94,26 @@ def main(argv=None):
         argv = sys.argv
 
     parser = optparse.OptionParser(usage =
-"""python %prog [options] <input gdx> <input csv1> [<input csv2>] ...
+"""python %prog [options] <input csv1> [<input csv2>] ...
 Insert data in a csv file into a gdx file.
 """)
+    parser.add_option("-i", "--input", help="Input GDX file (if ommitted a new file is created", default=None)
     parser.add_option("-o", "--output", help="Where to write the output file (defaults to overwriting input)", default=None)
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
         options, args = parser.parse_args(argv)
 
-        input_gdx = args[1]
-        input_csvs = args[2:]
+        input_csvs = args[1:]
+        input_gdx = options.input
         output_gdx = options.output
         if not output_gdx:
-            output_gdx = input_gdx
+            if not input_gdx:
+                parse.error("If you don't specify an input GDX, you must specify an output file name")
+            else:
+                output_gdx = input_gdx
 
-        print "Reading gdx from '%s', adding data in %s, and writing to '%s'" % (input_gdx, input_csvs, output_gdx)
-        
-        insert_symbols(input_gdx, input_csvs, output_gdx, options.gams_dir)
+        insert_symbols(input_csvs, input_gdx, output_gdx, options.gams_dir)
 
     except (optparse.OptionError, TypeError), err:
         print >>sys.stderr, err
