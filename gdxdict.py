@@ -319,11 +319,11 @@ def write(symbols, filename, gams_dir):
 
 #- Setting symbol info ---------------------------------------------------------
 
-def add_UEL(symbols, name, description):
+def add_UEL(symbols, name, description=None):
     if name not in symbols["__universal_dict"]:
         symbols["__universal_dict"][name] = len(symbols["__universal_order"])
         symbols["__universal_order"].append(name)
-        symbols["__universal_desc"].append(description)
+        if description: symbols["__universal_desc"].append(description)
 
 
 def merge_UELs(s1, s2):

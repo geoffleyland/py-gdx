@@ -18,8 +18,7 @@ class csv_error(Exception):
 
 #- Replace a parameter with the contents of a csv file -------------------------
 
-def insert_symbol(symbols, input_csv):
-    print "Reading from", input_csv
+def insert_symbol(symbols, input_csv, stage):
     reader = csv.reader(open(input_csv))
 
     try: header = reader.next()
@@ -29,10 +28,19 @@ def insert_symbol(symbols, input_csv):
     symbol_names = []
     for s in header[1:]:
         symbol_names.append(s.strip())
+    if stage == 1:
+        if len(domains) > 1 or domains[0] != "*": return
+    elif stage == 2:
+        if len(domains) > 1 or domains[0] == "*": return
+    else:
+        if len(domains) == 1: return
+
+    print "Reading from", input_csv
 
     for s in symbol_names:
         if not s in symbols:
             symbols[s] = {}
+        if not "domain" in gdxdict.get_symbol_info(symbols, s):
             info = gdxdict.get_symbol_info(symbols, s)
             info["dims"] = len(domains)
             nd = []
@@ -56,7 +64,17 @@ def insert_symbol(symbols, input_csv):
             symbol = symbols[name]
             for j in range(len(keys)):
                 k = keys[j]
+                if domains[j] != "*":
+                    if not domains[j] in symbols:
+                        symbols[domains[j]] = {}
+                        gdxdict.set_type(symbols, domains[j], "Set")
+                        gdxdict.set_dims(symbols, domains[j], "*")
+                    if not k in symbols[domains[j]]:
+                        symbols[domains[j]][k] = True
+                        gdxdict.add_UEL(symbols, k)
+
                 if j == len(keys)-1:
+                    gdxdict.add_UEL(symbols, k)
                     value = value.strip().upper()
                     if value == "YES" or value == "NO":
                         if value == "YES":
@@ -82,7 +100,13 @@ def insert_symbols(input_csvs, input_gdx=None, output_gdx=None, gams_dir=None):
         symbols = gdxdict.new()
 
     for c in input_csvs:
-        insert_symbol(symbols, c)
+        insert_symbol(symbols, c, 1)
+
+    for c in input_csvs:
+        insert_symbol(symbols, c, 2)
+
+    for c in input_csvs:
+        insert_symbol(symbols, c, 3)
 
     gdxdict.write(symbols, output_gdx, gams_dir)
 
