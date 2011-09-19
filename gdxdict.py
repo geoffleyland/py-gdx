@@ -132,7 +132,8 @@ def guess_domains(symbols):
                 for j in keys[i]:
                     if pd == None:
                         pd = {}
-                        for s in set_map[j]: pd[s] = True
+                        if j in set_map:
+                            for s in set_map[j]: pd[s] = True
                     else:
                         remove = []
                         for s in pd:
