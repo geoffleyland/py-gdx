@@ -152,7 +152,7 @@ def write_symbol_report(files, symbol_names, output=None, gams_dir=None):
                     pd = {}
                     potential_domains.append(pd)
                     for a in info["domain"][d]["ancestors"]:
-                        if a != "*":
+                        if a != "*" or len(info["domain"][d]["ancestors"]) == 1:
                             pd[a] = gdxdict.get_symbol_info(filesymbols[f], a)["records"]
                 else:
                     pd = potential_domains[d]
