@@ -359,6 +359,10 @@ def set_description(symbols, name, d):
     get_symbol_info(symbols, name)["description"] = d
 
 
+def get_description(symbols, name):
+    return get_symbol_info(symbols, name)["description"]
+
+
 def set_type(symbols, name, t):
     if type(t) == str:
         typename = t

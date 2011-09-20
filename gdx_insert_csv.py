@@ -24,10 +24,18 @@ def insert_symbol(symbols, input_csv, stage):
     try: header = reader.next()
     except: return
 
-    domains = header[0].split(".")
+    domains = []
     symbol_names = []
-    for s in header[1:]:
-        symbol_names.append(s.strip())
+    description = None
+    for c in header:
+        c = c.strip()
+        if c.startswith("("):
+            domains.append(c[1:-1])
+        elif c.startswith("!"):
+            description = c[1:]
+        else:
+            symbol_names.append(c)
+
     if stage == 1:
         if len(domains) > 1 or domains[0] != "*": return
     elif stage == 2:
@@ -36,6 +44,9 @@ def insert_symbol(symbols, input_csv, stage):
         if len(domains) == 1: return
 
     print "Reading from", input_csv
+
+    if description:
+        gdxdict.set_description(symbols, symbol_names[0], description)
 
     for s in symbol_names:
         if not s in symbols:
@@ -56,14 +67,18 @@ def insert_symbol(symbols, input_csv, stage):
                     raise csv_error("Inconsistent symbol dimensions")
 
     for row in reader:
-        keys = row[0].split(".")
-        values = row[1:]
+        keys = row[0:len(domains)]
+        values = row[len(domains):len(domains)+len(symbol_names)]
+        if len(row) > len(domains) + len(symbol_names):
+            row_description = row[-1].strip()
+        else:
+            row_description = None
         for i in range(len(values)):
-            name = symbol_names[i]
-            value = values[i]
+            name = symbol_names[i].strip()
+            value = values[i].strip().upper()
             symbol = symbols[name]
             for j in range(len(keys)):
-                k = keys[j]
+                k = keys[j].strip()
                 if domains[j] != "*":
                     if not domains[j] in symbols:
                         symbols[domains[j]] = {}
@@ -75,7 +90,6 @@ def insert_symbol(symbols, input_csv, stage):
 
                 if j == len(keys)-1:
                     gdxdict.add_UEL(symbols, k)
-                    value = value.strip().upper()
                     if value == "YES" or value == "NO":
                         if value == "YES":
                             symbol[k] = True
@@ -85,6 +99,10 @@ def insert_symbol(symbols, input_csv, stage):
                     else:
                         symbol[k] = float(value)
                         gdxdict.set_type(symbols, name, "Parameter")
+                    if row_description:
+                        if not "__desc" in symbol:
+                            symbol["__desc"] = {}
+                        symbol["__desc"][k] = row_description
                 else:
                     if not k in symbol:
                         symbol[k] = {}

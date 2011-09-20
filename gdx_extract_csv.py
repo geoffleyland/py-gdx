@@ -8,6 +8,7 @@ import os
 import os.path
 import optparse
 import string
+import csv
 
 
 #- Errors ----------------------------------------------------------------------
@@ -18,23 +19,6 @@ class extract_error(Exception):
 
 
 #- Replace a parameter with the contents of a csv file -------------------------
-
-def are_the_last_sets_unique(s, names={}, address=None):
-    assert(type(s) == dict)
-    for k in s:
-        if k.startswith("__"): continue
-        s2 = s[k]
-        if type(s2) == dict:
-            if address:
-                a2 = address + "." + k
-            else:
-                a2 = k
-            count_set_elements(s[k], names, a2)
-        else:
-            if address in names: return False
-            names[address] = True
-    return True
-
 
 def write_value(v, header, row_map, values, address):
     if not address:
@@ -49,22 +33,7 @@ def write_value(v, header, row_map, values, address):
     values[address][header] = v
 
 
-def write_set(s, header, row_map, values, address=None):
-    assert(type(s) == dict)
-    for k in s:
-        if k.startswith("__"): continue
-        s2 = s[k]
-        if type(s2) == "dict":
-            if address:
-                a2 = address + "." + k
-            else:
-                a2 = k
-            write_set(s[k], header, row_map, values, a2)
-        else:
-            write_value(k, header, row_map, values, address)
-
-
-def write_parameter(s, header, row_map, values, stype="notset", address=None):
+def write_parameter(s, header, row_map, values, descriptions, stype="notset", address=None):
     if type(s) == dict:
         for k in s:
             if k.startswith("__"): continue
@@ -72,7 +41,11 @@ def write_parameter(s, header, row_map, values, stype="notset", address=None):
                 a2 = address + "." + k
             else:
                 a2 = k
-            write_parameter(s[k], header, row_map, values, stype, a2)
+            if "__desc" in s and k in s["__desc"]:
+                if not a2 in descriptions:
+                    descriptions[a2] = {}
+                descriptions[a2][header] = s["__desc"][k]
+            write_parameter(s[k], header, row_map, values, descriptions, stype, a2)
     else:
         if stype == "set": s = True
         write_value(s, header, row_map, values, address)
@@ -85,6 +58,7 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
     row_map = {} 
     header_map = {}
     values = {}
+    descriptions = {}
 
     for f in filesymbols:
         symbols = filesymbols[f]
@@ -99,12 +73,9 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
                 s = symbols[sn]
                 typename, typecode = gdxdict.get_type(symbols, sn)
                 if typename == "Set":
-#                    if gdxdict.get_dims(symbols, sn) > 1 and are_the_last_sets_unique(s):
-#                        write_set(s, header, row_map, values)
-#                    else:
-                        write_parameter(s, header, row_map, values, "set")
+                    write_parameter(s, header, row_map, values, descriptions, "set")
                 else:
-                    write_parameter(s, header, row_map, values)
+                    write_parameter(s, header, row_map, values, descriptions)
 
     uel_dict = symbols1["__universal_dict"]
     rows = []
@@ -118,30 +89,39 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
     headers = []
     for h in header_map: headers.append(h)
     headers.sort()
-    
-    output.write(string.join(domains, "."))
-    for h in headers: output.write(", %s" % h)
-    output.write("\n")
+
+    is_one_d_set = True if (len(headers) == 1 and len(domains) == 1) else False
+
+    csvout = csv.writer(output)
+
+    csvrow = []
+    for d in domains: csvrow.append("(" + d + ")")
+    csvrow += headers
+    if is_one_d_set:
+        csvrow.append("!" + gdxdict.get_description(symbols, headers[0]))
+    csvout.writerow(csvrow)
+
     for r in rows:
+        csvrow = []
         name = r[1]
-        output.write(name)
+        csvrow += name.split(".")
         for h in headers:
-            output.write(", ")
             if name in values and h in values[name]:
                 v = values[name][h]
                 if type(v) == float:
-                    output.write("%.16g" % v)
+                    csvrow.append("%.16g" % v)
                 elif type(v) == bool:
                     if v == True:
-                        output.write("YES")
+                        csvrow.append("YES")
                     else:
-                        output.write("NO")
+                        csvrow.append("NO")
                 else:
-                    output.write(v)
+                    csvrow.append(v)
             else:
-                output.write("NO")
-        output.write("\n")
-
+                csvrow.append("NO")
+        if is_one_d_set and name in descriptions and h in descriptions[name]:
+            csvrow.append(descriptions[name][h])
+        csvout.writerow(csvrow)
 
 def read_files(files, gams_dir=None):
     filesymbols = {}
@@ -255,7 +235,7 @@ def write_all_reports(files, output, gams_dir=None):
         domains = []
         for d in info["domain"]:
             domains.append(d["key"])
-        write_report(filesymbols, symbols, domains, [s], open(output+s+".csv", "w"))
+        write_report(filesymbols, symbols, domains, [s], open(output+s+".csv", "wb"))
 
 
 #- main ------------------------------------------------------------------------
@@ -326,7 +306,7 @@ Denmark, 70032, 124781
             if options.all:
                 outfile = options.output
             else:
-                outfile = open(options.output, "w")
+                outfile = open(options.output, "wb")
         else:
             outfile = sys.stdout
 
