@@ -139,8 +139,9 @@ def main(argv=None):
 """python %prog [options] <input csv1> [<input csv2>] ...
 Insert data in a csv file into a gdx file.
 """)
-    parser.add_option("-i", "--input", help="Input GDX file (if ommitted a new file is created", default=None)
+    parser.add_option("-i", "--input", help="Input GDX file (if omitted a new file is created)", default=None)
     parser.add_option("-o", "--output", help="Where to write the output file (defaults to overwriting input)", default=None)
+    parser.add_option("-d", "--directory", help="Directory from which to read csv files", action="append", dest="directories")
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
@@ -154,6 +155,13 @@ Insert data in a csv file into a gdx file.
                 parse.error("If you don't specify an input GDX, you must specify an output file name")
             else:
                 output_gdx = input_gdx
+        if options.directories:
+            for d in options.directories:
+                for f in os.listdir(d):
+                    if f.endswith(".csv"):
+                        input_csvs.append(os.path.join(d, f))
+
+            
 
         insert_symbols(input_csvs, input_gdx, output_gdx, options.gams_dir)
 
