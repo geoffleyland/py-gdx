@@ -37,9 +37,11 @@ def insert_symbol(symbols, input_csv, stage):
             symbol_names.append(c)
 
     if stage == 1:
-        if len(domains) > 1 or domains[0] != "*": return
+        if len(domains) > 0 or domains[0] != "*": return
     elif stage == 2:
-        if len(domains) > 1 or domains[0] == "*": return
+        if len(domains) != 1 or domains[0] != "*": return
+    elif stage == 3:
+        if len(domains) != 1 or domains[0] == "*": return
     else:
         if len(domains) == 1: return
 
@@ -68,6 +70,17 @@ def insert_symbol(symbols, input_csv, stage):
 
     for row in reader:
         keys = row[0:len(domains)]
+        for j in range(len(keys)):
+            k = keys[j].strip()
+            gdxdict.add_UEL(symbols, k)
+            if domains[j] != "*":
+                if not domains[j] in symbols:
+                    symbols[domains[j]] = {}
+                    gdxdict.set_type(symbols, domains[j], "Set")
+                    gdxdict.set_dims(symbols, domains[j], "*")
+                if not k in symbols[domains[j]]:
+                    symbols[domains[j]][k] = True
+
         values = row[len(domains):len(domains)+len(symbol_names)]
         if len(row) > len(domains) + len(symbol_names):
             row_description = row[-1].strip()
@@ -79,14 +92,6 @@ def insert_symbol(symbols, input_csv, stage):
             symbol = symbols[name]
             for j in range(len(keys)):
                 k = keys[j].strip()
-                if domains[j] != "*":
-                    if not domains[j] in symbols:
-                        symbols[domains[j]] = {}
-                        gdxdict.set_type(symbols, domains[j], "Set")
-                        gdxdict.set_dims(symbols, domains[j], "*")
-                    if not k in symbols[domains[j]]:
-                        symbols[domains[j]][k] = True
-                        gdxdict.add_UEL(symbols, k)
 
                 if j == len(keys)-1:
                     gdxdict.add_UEL(symbols, k)
@@ -117,14 +122,9 @@ def insert_symbols(input_csvs, input_gdx=None, output_gdx=None, gams_dir=None):
     else:
         symbols = gdxdict.new()
 
-    for c in input_csvs:
-        insert_symbol(symbols, c, 1)
-
-    for c in input_csvs:
-        insert_symbol(symbols, c, 2)
-
-    for c in input_csvs:
-        insert_symbol(symbols, c, 3)
+    for i in range(1,5):
+        for c in input_csvs:
+            insert_symbol(symbols, c, i)
 
     gdxdict.write(symbols, output_gdx, gams_dir)
 

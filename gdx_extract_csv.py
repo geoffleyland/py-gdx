@@ -123,6 +123,7 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
             csvrow.append(descriptions[name][h])
         csvout.writerow(csvrow)
 
+
 def read_files(files, gams_dir=None):
     filesymbols = {}
     symbols1 = None
@@ -226,6 +227,12 @@ def write_all_reports(files, output, gams_dir=None):
         pass
     
     filesymbols, symbols = read_files(files, gams_dir)
+
+    universal_file = open(output+"__universal.csv", "w")
+    universal_file.write("(*)\n")
+    for s in symbols["__universal_order"]:
+        universal_file.write(s + "\n")
+    universal_file.close()
 
     # Find all the symbols that have the specified domains
     for s in symbols:
