@@ -26,7 +26,7 @@ def write_value(v, header, values, address):
             address = v
             v = True
         else:
-            address = "Scalar"
+            address = ""
     if not address in values:
         values[address] = {}
     values[address][header] = v
@@ -80,7 +80,9 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
         names = r.split(".")
         nums = ()
         for n in names:
-            nums = nums + (uel_dict[n.lower()],)
+            if n != "":
+                nums = nums + (uel_dict[n.lower()],)
+            nums = nums + (1,)
         rows.append((nums, r))
     rows.sort()
     headers = []
@@ -101,7 +103,8 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
     for r in rows:
         csvrow = []
         name = r[1]
-        csvrow += name.split(".")
+        if name != "":
+            csvrow += name.split(".")
         for h in headers:
             if name in values and h in values[name]:
                 v = values[name][h]
@@ -237,7 +240,6 @@ def write_all_reports(files, output, gams_dir=None):
     # Find all the symbols that have the specified domains
     for s in symbols:
         info = symbols.getinfo(s)
-        if info["typename"] == "Scalar": continue
         domains = []
         for d in info["domain"]:
             domains.append(d["key"])

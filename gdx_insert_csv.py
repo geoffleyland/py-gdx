@@ -37,13 +37,13 @@ def insert_symbol(symbols, input_csv, stage):
             symbol_names.append(c)
 
     if stage == 1:
-        if len(domains) > 0 or domains[0] != "*": return
+        if len(domains) > 0: return # or domains[0] != "*": return
     elif stage == 2:
         if len(domains) != 1 or domains[0] != "*": return
     elif stage == 3:
         if len(domains) != 1 or domains[0] == "*": return
     else:
-        if len(domains) == 1: return
+        if len(domains) <= 1: return
 
     print "Reading from", input_csv
 
@@ -82,25 +82,32 @@ def insert_symbol(symbols, input_csv, stage):
             name = symbol_names[i].strip()
             value = values[i].strip().upper()
             symbol = symbols[name]
-            for j in range(len(keys)):
+            for j in range(len(keys)-1):
                 k = keys[j].strip()
+                if not k in symbol:
+                    symbol[k] = gdxdict.gdxdim(symbols)
+                symbol = symbol[k]
 
-                if j == len(keys)-1:
-                    if value == "YES" or value == "NO":
-                        if value == "YES":
-                            symbol[k] = True
-                        else:
-                            if k in symbol: del symbol[k]
-                        symbols.set_type(name, "Set")
-                    else:
-                        symbol[k] = float(value)
-                        symbols.set_type(name, "Parameter")
-                    if row_description:
-                        symbol.setinfo(k)["description"] = row_description
+            if len(keys) == 0:
+                symbol = symbols
+                k = name
+            else:
+                k = keys[-1].strip()
+
+            if value == "YES" or value == "NO":
+                if value == "YES":
+                    symbol[k] = True
                 else:
-                    if not k in symbol:
-                        symbol[k] = gdxdict.gdxdim(symbols)
-                    symbol = symbol[k]
+                    if k in symbol: del symbol[k]
+                symbols.set_type(name, "Set")
+            else:
+                symbol[k] = float(value)
+                symbols.set_type(name, "Parameter")
+
+            if row_description:
+                symbol.setinfo(k)["description"] = row_description
+
+
 
     for n in symbol_names:
         name = n.strip()
@@ -156,8 +163,6 @@ Insert data in a csv file into a gdx file.
                 for f in os.listdir(d):
                     if f.endswith(".csv"):
                         input_csvs.append(os.path.join(d, f))
-
-            
 
         insert_symbols(input_csvs, input_gdx, output_gdx, options.gams_dir)
 

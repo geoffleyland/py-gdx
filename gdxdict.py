@@ -316,6 +316,8 @@ class gdxdict:
             self.info[key] = {}
             if info["dims"] > 0:
                 self.symbols[key] = gdxdim(self)
+            else:
+                self.symbols[key] = None
             self.symbol_names[key] = info["name"]
         else:
             sinfo = self.info[key]
@@ -324,7 +326,7 @@ class gdxdict:
             if "dims" in sinfo and "dims" in info and sinfo["dims"] != info["dims"]:
                 raise gdxdict_error("Incompatible dimensions for symbol '%s' (%d and %d)" % (info["name"], sinfo["dims"], info["dims"]))
             if "domain" in sinfo and "domain" in info:
-                for d in range(len(isinfo["domain"])):
+                for d in range(len(sinfo["domain"])):
                     d1 = sinfo["domain"][d]
                     d2 = info["domain"][d]
                     if d1 and d2 and d1["key"] != d2["key"]:
