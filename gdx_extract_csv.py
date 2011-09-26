@@ -20,42 +20,39 @@ class extract_error(Exception):
 
 #- Replace a parameter with the contents of a csv file -------------------------
 
-def write_value(v, header, row_map, values, address):
+def write_value(v, header, values, address):
     if not address:
         if type(v) == str:
             address = v
             v = True
         else:
             address = "Scalar"
-    row_map[address] = True
     if not address in values:
         values[address] = {}
     values[address][header] = v
 
 
-def write_parameter(s, header, row_map, values, descriptions, stype="notset", address=None):
-    if type(s) == dict:
+def write_parameter(s, header, values, descriptions, stype="notset", address=None):
+    if isinstance(s, gdxdict.gdxdim):
         for k in s:
-            if k.startswith("__"): continue
             if address:
                 a2 = address + "." + k
             else:
                 a2 = k
-            if "__desc" in s and k in s["__desc"]:
+            if "description" in s.getinfo(k):
                 if not a2 in descriptions:
                     descriptions[a2] = {}
-                descriptions[a2][header] = s["__desc"][k]
-            write_parameter(s[k], header, row_map, values, descriptions, stype, a2)
+                descriptions[a2][header] = s.getinfo(k)["description"]
+            write_parameter(s[k], header, values, descriptions, stype, a2)
     else:
         if stype == "set": s = True
-        write_value(s, header, row_map, values, address)
+        write_value(s, header, values, address)
 
 
 def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
     if not output: output = sys.stdout
 
     # Generate all the lines for the report
-    row_map = {} 
     header_map = {}
     values = {}
     descriptions = {}
@@ -71,19 +68,19 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
                     header = sn
                 header_map[header] = True
                 s = symbols[sn]
-                typename, typecode = gdxdict.get_type(symbols, sn)
+                typename = symbols.getinfo(sn)["typename"]
                 if typename == "Set":
-                    write_parameter(s, header, row_map, values, descriptions, "set")
+                    write_parameter(s, header, values, descriptions, "set")
                 else:
-                    write_parameter(s, header, row_map, values, descriptions)
+                    write_parameter(s, header, values, descriptions)
 
-    uel_dict = symbols1["__universal_dict"]
+    uel_dict = symbols1.universal
     rows = []
-    for r in row_map:
+    for r in values:
         names = r.split(".")
         nums = ()
         for n in names:
-            nums = nums + (uel_dict[n],)
+            nums = nums + (uel_dict[n.lower()],)
         rows.append((nums, r))
     rows.sort()
     headers = []
@@ -97,8 +94,8 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
     csvrow = []
     for d in domains: csvrow.append("(" + d + ")")
     csvrow += headers
-    if is_one_d_set:
-        csvrow.append("!" + gdxdict.get_description(symbols, headers[0]))
+    if len(headers) == 1 and symbols1.getinfo(headers[0])["description"]:
+        csvrow.append("!" + symbols1.getinfo(headers[0])["description"])
     csvout.writerow(csvrow)
 
     for r in rows:
@@ -130,11 +127,13 @@ def read_files(files, gams_dir=None):
 
     # Read all the symbols from all the files
     for f in files:
-        filesymbols[f] = gdxdict.read(f, gams_dir)
+        G = gdxdict.gdxdict()
+        G.read(f, gams_dir)
+        filesymbols[f] = G
         if not symbols1:
-            symbols1 = filesymbols[f]
+            symbols1 = G
         else:
-            gdxdict.merge_UELs(symbols1, filesymbols[f])
+            symbols1.merge_UELs(G)
 
     return filesymbols, symbols1
 
@@ -146,19 +145,20 @@ def write_symbol_report(files, symbol_names, output=None, gams_dir=None):
     potential_domains = []
     for sn in symbol_names:
         for f in files:
-            info = gdxdict.get_symbol_info(filesymbols[f], sn)
+            info = filesymbols[f].getinfo(sn)
             for d in range(info["dims"]):
                 if d >= len(potential_domains):
                     pd = {}
                     potential_domains.append(pd)
                     for a in info["domain"][d]["ancestors"]:
                         if a != "*" or len(info["domain"][d]["ancestors"]) == 1:
-                            pd[a] = gdxdict.get_symbol_info(filesymbols[f], a)["records"]
+                            pd[a] = filesymbols[f].getinfo(a)["records"]
                 else:
                     pd = potential_domains[d]
                     sd = {}
                     for a in info["domain"][d]["ancestors"]:
-                        sd[a] = gdxdict.get_symbol_info(filesymbols[f], a)["records"]
+                        if a != "*" or len(info["domain"][d]["ancestors"]) == 1:
+                            sd[a] = filesymbols[f].getinfo(a)["records"]
                     remove = []
                     for a in pd:
                         if a in sd:
@@ -199,7 +199,7 @@ def write_domain_report(files, domains, output=None, gams_dir=None):
             if not k in symbols:
                 remove.append(k)
                 continue
-            info = gdxdict.get_symbol_info(symbols, k)
+            info = symbols.getinfo(k)
             if info["dims"] != len(domains):
                 remove.append(k)
                 continue
@@ -230,14 +230,13 @@ def write_all_reports(files, output, gams_dir=None):
 
     universal_file = open(output+"__universal.csv", "w")
     universal_file.write("(*)\n")
-    for s in symbols["__universal_order"]:
+    for s in symbols.order:
         universal_file.write(s + "\n")
     universal_file.close()
 
     # Find all the symbols that have the specified domains
     for s in symbols:
-        if s.startswith("__"): continue
-        info = gdxdict.get_symbol_info(symbols, s)
+        info = symbols.getinfo(s)
         if info["typename"] == "Scalar": continue
         domains = []
         for d in info["domain"]:

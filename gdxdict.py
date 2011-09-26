@@ -7,6 +7,13 @@ import sys
 import string
 
 
+#- Errors ----------------------------------------------------------------------
+
+class gdxdict_error(Exception):
+     def __init__(self, msg):
+         self.msg = msg
+
+
 #- Data ------------------------------------------------------------------------
 
 level_names = [ ".l", ".m", ".lo", ".ub", ".scale" ]
@@ -42,88 +49,139 @@ default_variable_fields = [
 ]
 
 
-#- New symbol object without a file --------------------------------------------
+#- One dimension of a gdxdict --------------------------------------------------
 
-def new():
-    symbols = {}
+class gdxdim:
 
-    symbol_info = {}
-    symbols["__symbol_info"] = symbol_info
+    def __init__(self, parent):
+        self.parent = parent
+        self.items = {}
+        self.info = {}
 
-    # read the universal set
-    universal_dict = {}
-    universal_order = []
-    universal_desc = []
-    symbols["__universal_dict"] = {}
-    symbols["__universal_order"] = []
-    symbols["__universal_desc"] = []
-    symbol_info["__universal"] = {}
+    def __setitem__(self, key, value):
+        self.items[key.lower()] = value
+        self.parent.add_key(key)
 
-    return symbols
+    def __getitem__(self, key):
+        return self.items[key.lower()]
+
+    def __iter__(self):
+        for k in self.parent.order:
+            if k.lower() in self.items: yield k
+
+    def __contains__(self, key):
+        return key.lower() in self.items
+
+    def getinfo(self, key, ikey=None):
+        kl = key.lower()
+        if kl in self.info:
+            if ikey:
+                return self.info[kl][ikey]
+            else:
+                return self.info[kl]
+        else:
+            if ikey:
+                return None
+            else:
+                return {}
+
+    def setinfo(self, key, ikey=None, value=None):
+        kl = key.lower()
+        if not kl in self.info:
+            self.info[kl] = {}
+        if ikey:
+            self.info[kl][ikey] = value
+        else:
+            return self.info[kl]
 
 
-#- Read a GDX file -------------------------------------------------------------
+#- Reading tools ---------------------------------------------------------------
 
-def get_symbol(H, d, name, typename, values):
+def read_symbol(H, d, name, typename, values):
     if typename == "Set":
         d[name] = True
     else:
         d[name] = values[gdxcc.GMS_VAL_LEVEL]
 
     if typename == "Variable" or typename == "Equation":
-        if not "__limits" in d:
-            d["__limits"] = {}
-        limits = d["__limits"]
-        slimits = {}
-        limits[name] = slimits
+        limits = {}
         for i in range(5):
-            slimits[level_names[i]] = values[i]
+            limits[level_names[i]] = values[i]
+        d.setinfo(name)["limits"] = limits
 
     if typename == "Set":
         ret, description, node = gdxcc.gdxGetElemText(H, int(values[gdxcc.GMS_VAL_LEVEL]))
         if ret != 0:
-            if not "__desc" in d:
-                d["__desc"] = {}
-            d["__desc"][name] = description
+            d.setinfo(name)["description"] = description
 
 
-def visit_domains(current, keys, index):
+#- Writing Tools ---------------------------------------------------------------
+
+values = gdxcc.doubleArray(gdxcc.GMS_VAL_MAX)
+
+
+def set_symbol(H, d, name, typename, userinfo, values, dims):
+    if typename == "Set":
+        text_index = 0
+        if "description" in d.getinfo(name):
+            ret, text_index = gdxcc.gdxAddSetText(H, d.getinfo(name)["description"])
+        values[gdxcc.GMS_VAL_LEVEL] = float(text_index)
+    else:
+        values[gdxcc.GMS_VAL_LEVEL] = d[name]
+
+    if (typename == "Variable" or typename == "Equation") and "limits" in d.getinfo(name):
+        limits = d.getinfo[name]("limits")
+        for i in range(1, 5):
+            ln = level_names[i]
+            if ln in limits:
+                values[i] = limits[ln]
+
+    gdxcc.gdxDataWriteStr(H, dims + [name], values)
+
+
+def write_symbol(H, typename, userinfo, s, dims):
+    for k in s:
+        s2 = s[k]
+        if isinstance(s2, gdxdim):
+            write_symbol(H, typename, userinfo, s2, dims + [k])
+        else:
+            set_symbol(H, s, k, typename, userinfo, values, dims)
+
+
+#- Guessing domains ------------------------------------------------------------
+
+def visit_domains(current, keys, dims, index):
     for k in current:
-        if k.startswith("__"): continue
         keys[index][k] = True
         v = current[k]
-        if type(v) == dict:
-            visit_domains(v, keys, index+1)
+        if index < dims-1:
+            visit_domains(v, keys, dims, index+1)
 
 
-def guess_domains(symbols):
+def guess_domains(G):
     # We don't always get symbol domains from GDX (in 23.7.2 and below
     # gdxSymbolGetDomain doesn't work and otherwise, some GDX files don't seem
     # to contain this information).  So here we try to guess
 
-    symbol_info = symbols["__symbol_info"]
-
-    # First, find all the symbols in all the one-dimensional sets, but map it
-    # backwards so we have a map from every set key back to all the sets its in
+    # First, find all the symbols in all the one-dimensional sets, but map
+    # backwards so we have a map from every set key back to all the sets it's in
     set_map = {}
-    for k in symbols:
-        if k.startswith("__"): continue
-        info = symbol_info[k]
+    for k in G:
+        info = G.getinfo(k)
         if info["type"] == gdxcc.GMS_DT_SET and info["dims"] == 1:
-            symbol = symbols[k]
+            symbol = G[k]
             for e in symbol:
                 if not e in set_map:
                     set_map[e] = {}
                 set_map[e][k] = True
 
     # Then run through all the symbols trying to guess any missing domains
-    for k in symbols:
-        if k.startswith("__"): continue
-        info = symbol_info[k]
+    for k in G:
+        info = G.getinfo(k)
         if info["dims"] > 0:
             keys = [{} for i in range(info["dims"])]
             # Enumerate all the keys the symbol uses on each of its dimensions
-            visit_domains(symbols[k], keys, 0)
+            visit_domains(G[k], keys, info["dims"], 0)
             for i in range(info["dims"]):
                 if info["domain"][i]["key"] != "*": continue
                 # For each dimension that currently has '*' as it's domain,
@@ -155,289 +213,241 @@ def guess_domains(symbols):
                     if info["type"] == gdxcc.GMS_DT_SET:
                         min_length = len(keys[i])
                     for s in pd:
-                        l = symbol_info[s]["records"]
+                        l = G.getinfo(s)["records"]
                         if l < length and l > min_length:
                             length = l
                             smallest_set = s
                     if smallest_set:
-                        info["domain"][i] = { "index":symbol_info[smallest_set]["number"], "key":smallest_set }
+                        info["domain"][i] = { "index":G.getinfo(smallest_set)["number"], "key":smallest_set }
 
 
-def guess_ancestor_domains(symbols):
-    symbol_info = symbols["__symbol_info"]
-    set_map = {}
-    for k in symbols:
-        if k.startswith("__"): continue
-        info = symbol_info[k]
+def guess_ancestor_domains(G):
+    for k in G:
+        info = G.getinfo(k)
         if info["dims"] == 0: continue
         for i in range(info["dims"]):
             ancestors = [info["domain"][i]["key"]]
             while ancestors[-1] != '*':
-                ancestors.append(symbol_info[ancestors[-1]]["domain"][0]["key"])
+                ancestors.append(G.getinfo(ancestors[-1])["domain"][0]["key"])
             info["domain"][i]["ancestors"] = ancestors
 
 
-def read(filename, gams_dir):
-    H = gdxx.open(gams_dir)
-    assert gdxcc.gdxOpenRead(H, filename)[0], "Couldn't open %s" % filename
+#- GDX Dict --------------------------------------------------------------------
 
-    symbols = {}
+class gdxdict:
 
-    info = gdxx.file_info(H)
-    for k in info:
-        symbols["__" + k] = info[k]
+    def __init__(self):
+        self.file_info = {}
 
-    symbol_info = {}
-    symbols["__symbol_info"] = symbol_info
+        self.universal = {}
+        self.universal_info = {}
+        self.order = []
+        self.universal_description = []
 
-    # read the universal set
-    universal_dict = {}
-    universal_order = []
-    universal_desc = []
-    symbols["__universal_dict"] = universal_dict
-    symbols["__universal_order"] = universal_order
-    symbols["__universal_desc"] = universal_desc
-    sinfo = gdxx.symbol_info(H, 0)
-    symbol_info["__universal"] = {}
-    for k in sinfo:
-        symbol_info["__universal"][k] = sinfo[k]
-    ok, records = gdxcc.gdxDataReadStrStart(H, 0)
+        self.symbols = {}
+        self.symbol_names = {}
+        self.info = {}
+
+
+    def __getitem__(self, key):
+        return self.symbols[key.lower()]
+
+    def __setitem__(self, key, value):
+        self.symbols[key.lower()] = value
+
+    def __contains__(self, key):
+        return key.lower() in self.symbols
+
+    def __iter__(self):
+        seen = {}
+        for stage in range(4):
+            for k in self.symbols:
+                info = self.getinfo(k)
+                dims = info["dims"]
+                domain1 = dims > 0 and info["domain"][0]["key"]
+                typename = "typename" in info and info["typename"]
+                if (not k in seen and
+                    ((stage == 0 and typename == "Set" and dims == 1 and domain1 == "*") or
+                     (stage == 1 and typename == "Set" and dims == 1 and domain1 != "*") or
+                     (stage == 2 and typename == "Set" and dims > 1) or
+                     (stage == 3 and typename != "Set"))):
+                    for d in info["domain"]:
+                        dkl = d["key"].lower()
+                        if dkl != "*" and not dkl in seen:
+                            yield self.symbol_names[dkl]
+                            seen[dkl] = True
+                    yield self.symbol_names[k]
+                    seen[k] = True
+
+    def getinfo(self, key, ikey=None):
+        kl = key.lower()
+        if ikey:
+            return self.info[kl][ikey]
+        else:
+            return self.info[kl]
+
+    def setinfo(self, key, ikey=None, value=None):
+        kl = key.lower()
+        if not kl in self.info:
+            self.info[kl] = {}
+        if ikey:
+            self.info[kl] = value
+        else:
+            return self.info[kl]
+
+    def add_key(self, key, description=None):
+        kl = key.lower()
+        if not kl in self.universal:
+            self.universal[kl] = len(self.order)
+            self.order.append(key)
+        if description:
+            self.universal_description[self.universal[kl]] = description
+
+    def add_symbol(self, info):
+        key = info["name"].lower()
+        if not "type" in info and "typename" in info:
+            info["type"] = get_type_code(info["typename"])
+        if not "userinfo" in info:
+            info["userinfo"] = 0
+        if not "description" in info:
+            info["description"] = ""
         
-    for i in range(records):
-        ok, elements, values, afdim = gdxcc.gdxDataReadStr(H)
-        if not ok: raise gdxx.GDX_error(H, "Error in gdxDataReadStr")
-        key = elements[0]
-        ret, description, node = gdxcc.gdxGetElemText(H, int(values[gdxcc.GMS_VAL_LEVEL]))
-        if ret == 0: description = None
-        universal_dict[key] = i
-        universal_order.append(key)
-        universal_desc.append(description)
+        if not key in self.info:
+            self.info[key] = {}
+            if info["dims"] > 0:
+                self.symbols[key] = gdxdim(self)
+            self.symbol_names[key] = info["name"]
+        else:
+            sinfo = self.info[key]
+            if "type" in sinfo and "type" in info and sinfo["type"] != info["type"]:
+                raise gdxdict_error("Incompatible types for symbol '%s' (%s and %s)" % (info["name"], sinfo["type"], info["type"]))
+            if "dims" in sinfo and "dims" in info and sinfo["dims"] != info["dims"]:
+                raise gdxdict_error("Incompatible dimensions for symbol '%s' (%d and %d)" % (info["name"], sinfo["dims"], info["dims"]))
+            if "domain" in sinfo and "domain" in info:
+                for d in range(len(isinfo["domain"])):
+                    d1 = sinfo["domain"][d]
+                    d2 = info["domain"][d]
+                    if d1 and d2 and d1["key"] != d2["key"]:
+                        raise gdxdict_error("Incompatible domain %d for symbol '%s' (%s and %s)" % (d, info["name"], d1["key"], d2["key"]))
 
-    # Read all the other symbols
-    for i in range(1, info["symbol_count"]+1):
+        for k in info:
+            if not k in self.info[key]:
+                self.info[key][k] = info[k]
 
-        sinfo = gdxx.symbol_info(H, i)
-        symbol_info[sinfo["name"]] = {}
-        for k in sinfo:
-            symbol_info[sinfo["name"]][k] = sinfo[k]
+    def set_type(self, name, t):
+        if type(t) == str:
+            typename = t
+            typecode = get_type_code(t)
+        else:
+            typecode = t
+            typename = gdxx.symbol_type_text[t]
+    
+        info = self.setinfo(name)
+        if "type" in info and info["type"] != typecode:
+            raise gdxdict_error("Incompatible types for symbol '%s' (%s and %s)" % (name, info["typename"], typename))
+            
+        info["type"] = typecode
+        info["typename"] = typename
 
-        ok, records = gdxcc.gdxDataReadStrStart(H, i)
-        
-        if sinfo["dims"] > 0:
-            symbols[sinfo["name"]] = {}
-        
+
+# -- Read a gdx file -----------------------------------------------------------
+
+    def read(self, filename, gams_dir=None):
+        H = gdxx.open(gams_dir)
+        assert gdxcc.gdxOpenRead(H, filename)[0], "Couldn't open %s" % filename
+
+        info = gdxx.file_info(H)
+        for k in info:
+            if not k in self.file_info:
+                self.file_info[k] = info[k]
+
+        # read the universal set
+        uinfo = gdxx.symbol_info(H, 0)
+        for k in uinfo:
+            if not k in self.universal_info: 
+                self.universal_info[k] = uinfo[k]
+
+        ok, records = gdxcc.gdxDataReadStrStart(H, 0)        
         for i in range(records):
             ok, elements, values, afdim = gdxcc.gdxDataReadStr(H)
             if not ok: raise gdxx.GDX_error(H, "Error in gdxDataReadStr")
-            if sinfo["dims"] == 0:
-                get_symbol(H, symbols, sinfo["name"], sinfo["typename"], values)
-            else:
-                symbol = symbols[sinfo["name"]]
-                current = symbol
-                for d in range(sinfo["dims"]-1):
-                    key = elements[d]
-                    if not key in current:
-                        current[key] = {}
-                    current = current[key]
-                key = elements[sinfo["dims"]-1]
-                get_symbol(H, current, key, sinfo["typename"], values)
+            key = elements[0]
+            ret, description, node = gdxcc.gdxGetElemText(H, int(values[gdxcc.GMS_VAL_LEVEL]))
+            if ret == 0: description = None
+            self.add_key(key, description)
 
-    gdxcc.gdxClose(H)
-    gdxcc.gdxFree(H)
+        # Read all the other symbols
+        for i in range(1, info["symbol_count"]+1):
 
-    guess_domains(symbols)
-    guess_ancestor_domains(symbols)
+            sinfo = gdxx.symbol_info(H, i)
+            self.add_symbol(sinfo)
 
-    return symbols
+            ok, records = gdxcc.gdxDataReadStrStart(H, i)
+        
+            for i in range(records):
+                ok, elements, values, afdim = gdxcc.gdxDataReadStr(H)
+                if not ok: raise gdxx.GDX_error(H, "Error in gdxDataReadStr")
+                if sinfo["dims"] == 0:
+                    read_symbol(H, self, sinfo["name"], sinfo["typename"], values)
+                else:
+                    symbol = self[sinfo["name"]]
+                    current = symbol
+                    for d in range(sinfo["dims"]-1):
+                        key = elements[d]
+                        if not key in current:
+                            current[key] = gdxdim(self)
+                        current = current[key]
+                    key = elements[sinfo["dims"]-1]
+                    read_symbol(H, current, key, sinfo["typename"], values)
+
+        gdxcc.gdxClose(H)
+        gdxcc.gdxFree(H)
+
+        guess_domains(self)
+        guess_ancestor_domains(self)
+
 
 
 #- Write a GDX file ------------------------------------------------------------
 
+    def write(self, filename, gams_dir=None):
+        H = gdxx.open(gams_dir)
+        assert gdxcc.gdxOpenWrite(H, filename, "gdxdict.py")[0], "Couldn't open %s" % filename
 
-values = gdxcc.doubleArray(gdxcc.GMS_VAL_MAX)
+        # write the universal set
+        gdxcc.gdxUELRegisterRawStart(H)
+        for i in range(len(self.order)):
+            gdxcc.gdxUELRegisterRaw(H, self.order[i])
+        gdxcc.gdxUELRegisterDone(H)
 
+        for k in self:
+            symbol = self[k]
+            info = self.getinfo(k)
+            if info["dims"] == 0:
+                if not gdxcc.gdxDataWriteStrStart(H, k, info["description"], 0, get_type_code(info["typename"]), info["userinfo"]):
+                    raise gdxx.GDX_error(H, "couldn't start writing data")
+                set_symbol(H, self, k, info["typename"], info["userinfo"], values, [])
+                gdxcc.gdxDataWriteDone(H)
+            else:
+                if not gdxcc.gdxDataWriteStrStart(H, k, info["description"], info["dims"], get_type_code(info["typename"]), info["userinfo"]):
+                    raise gdxx.GDX_error(H, "couldn't start writing data")
+                domain = []
+                for d in info["domain"]:
+                    domain.append(d["key"])
+                if gdxcc.gdxSymbolSetDomain(H, domain) != 1:
+                    raise gdxx.GDX_error(H, "couldn't set domain for symbol %s to %s" % (k, domain))
+                write_symbol(H, info["typename"], info["userinfo"], symbol, [])
+                gdxcc.gdxDataWriteDone(H)
 
-def set_symbol(H, d, name, typename, userinfo, values, dims):
-    if typename == "Set":
-        text_index = 0
-        if "__desc" in d and name in d["__desc"]:
-            ret, text_index = gdxcc.gdxAddSetText(H, d["__desc"][name])
-        values[gdxcc.GMS_VAL_LEVEL] = float(text_index)
-    else:
-        values[gdxcc.GMS_VAL_LEVEL] = d[name]
-
-    if (typename == "Variable" or typename == "Equation") and "__limits" in d and name in d["__limits"]:
-        limits = d["__limits"][name]
-        for i in range(1, 5):
-            ln = level_names[i]
-            if ln in limits:
-                values[i] = limits[ln]
-
-    gdxcc.gdxDataWriteStr(H, dims + [name], values)
-
-
-def write_symbol(H, typename, userinfo, s, dims):
-    for k in s:
-        if k.startswith("__"): continue
-        s2 = s[k]
-        if type(s2) == dict:
-            write_symbol(H, typename, userinfo, s2, dims + [k])
-        else:
-            set_symbol(H, s, k, typename, userinfo, values, dims)
-
-
-def write(symbols, filename, gams_dir):
-    H = gdxx.open(gams_dir)
-    assert gdxcc.gdxOpenWrite(H, filename, "gdxdict.py")[0], "Couldn't open %s" % filename
-
-    symbol_info = symbols["__symbol_info"]
-
-    # write the universal set
-    gdxcc.gdxUELRegisterRawStart(H)
-    for i in range(len(symbols["__universal_order"])):
-        gdxcc.gdxUELRegisterRaw(H, symbols["__universal_order"][i])
-    gdxcc.gdxUELRegisterDone(H)
-
-    for k in symbols:
-        if k.startswith("__"): continue
-        symbol = symbols[k]
-        info = symbol_info[k]
-        if type(symbol) != dict:
-            if not gdxcc.gdxDataWriteStrStart(H, k, info["description"], 0, get_type_code(info["typename"]), info["userinfo"]):
-                raise gdxx.GDX_error(H, "couldn't start writing data")
-            set_symbol(H, symbols, k, info["typename"], info["userinfo"], values, [])
-            gdxcc.gdxDataWriteDone(H)
-        else:
-            if not gdxcc.gdxDataWriteStrStart(H, k, info["description"], info["dims"], get_type_code(info["typename"]), info["userinfo"]):
-                raise gdxx.GDX_error(H, "couldn't start writing data")
-            write_symbol(H, info["typename"], info["userinfo"], symbol, [])
-            gdxcc.gdxDataWriteDone(H)
-
-    gdxcc.gdxClose(H)
-    gdxcc.gdxFree(H)
+        gdxcc.gdxClose(H)
+        gdxcc.gdxFree(H)
 
 
-#- Setting symbol info ---------------------------------------------------------
+#- UEL Handling ----------------------------------------------------------------
 
-def add_UEL(symbols, name, description=None):
-    if name not in symbols["__universal_dict"]:
-        symbols["__universal_dict"][name] = len(symbols["__universal_order"])
-        symbols["__universal_order"].append(name)
-        if description: symbols["__universal_desc"].append(description)
-
-
-def merge_UELs(s1, s2):
-    for i in range(len(s2["__universal_order"])):
-        add_UEL(s1, s2["__universal_order"][i], s2["__universal_desc"][i])
-
-
-def get_symbol_info(symbols, name):
-    if not "__symbol_info" in symbols:
-        symbols["__symbol_info"] = {}
-    if not name in symbols["__symbol_info"]:
-        if name == '*':
-            symbols["__symbol_info"][name] = {
-                "dims": 1,
-                "type": gdxcc.GMS_DT_SET,
-                "typename": "Set",
-                "description": "",
-                "userinfo": 0,
-                "records": len(symbols["__universal_order"])
-                }
-        else:
-            symbols["__symbol_info"][name] = {
-                "dims": 0,
-                "type": gdxcc.GMS_DT_PAR,
-                "typename": "Parameter",
-                "description": "",
-                "userinfo": 0
-                }
-    return symbols["__symbol_info"][name]
-
-
-def set_description(symbols, name, d):
-    get_symbol_info(symbols, name)["description"] = d
-
-
-def get_description(symbols, name):
-    return get_symbol_info(symbols, name)["description"]
-
-
-def set_type(symbols, name, t):
-    if type(t) == str:
-        typename = t
-        typecode = get_type_code(t)
-    else:
-        typecode = t
-        typename = gdxx.symbol_type_text[t]
-    
-    s = get_symbol_info(symbols, name)
-    s["type"] = typecode
-    s["typename"] = typename
-
-
-def get_type(symbols, name):
-    i = get_symbol_info(symbols, name)
-    return i["typename"], i["type"]
-
-
-def set_dims(symbols, name, d):
-    get_symbol_info(symbols, name)["dims"] = d
-
-
-def get_dims(symbols, name):
-    return get_symbol_info(symbols, name)["dims"]
-
-
-#- "pretty"ish printing --------------------------------------------------------
-
-def _print_symbol(k, s, dims):
-    if type(s) == dict:
-        for k2 in s:
-            _print_symbol(k2, s[k2], dims + [k])
-    else:
-        print dims + [k], s
-
-
-def print_symbol(name, s):
-    _print_symbol(name, s, [])
-
-
-#- main ------------------------------------------------------------------------
-
-class Usage(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-def main(argv=None):
-    if argv is None:
-        argv = sys.argv
-    try:
-        if len(sys.argv) < 3 or len(sys.argv) > 4:
-            raise Usage("Wrong number of arguments")
-
-        input_gdx = sys.argv[1]
-        output_gdx = sys.argv[2]
-        gams_dir = None
-        if len(sys.argv) == 4:
-            gams_dir = sys.argv[3]
-            
-        symbols = read(input_gdx, gams_dir)
-        write(symbols, output_gdx, gams_dir)
-
-    except Usage, err:
-        print >>sys.stderr, "Error: %s" % err.msg
-        print >>sys.stderr, "Usage: %s <GDX input file> <GDX output file> [GAMS system directory]" % sys.argv[0]
-        return 2
-    except gdxx.GDX_error, err:
-        print >>sys.stderr, "GDX Error: %s" % err.msg
-        return 2
-
-    return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    def merge_UELs(self, G2):
+        for i in range(len(G2.order)):
+            self.add_key(G2.order[i], G2.universal_description[i])
 
 
 #- EOF -------------------------------------------------------------------------

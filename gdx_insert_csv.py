@@ -47,37 +47,29 @@ def insert_symbol(symbols, input_csv, stage):
 
     print "Reading from", input_csv
 
-    if description:
-        gdxdict.set_description(symbols, symbol_names[0], description)
+    for d in domains:
+        if d != "*":
+            info = {}
+            info["name"] = d
+            info["dims"] = 1
+            info["typename"] = "Set"
+            symbols.add_symbol(info)
 
     for s in symbol_names:
-        if not s in symbols:
-            symbols[s] = {}
-        if not "domain" in gdxdict.get_symbol_info(symbols, s):
-            info = gdxdict.get_symbol_info(symbols, s)
-            info["dims"] = len(domains)
-            nd = []
-            info["domains"] = nd
-            for d in domains:
-                nd.append({"key": d})
-        else:
-            current_domains = gdxdict.get_symbol_info(symbols, s)["domain"]
-            if len(current_domains) != len(domains):
-                raise csv_error("Inconsistent symbol dimensions")
-            for i in range(len(domains)):
-                if domains[i] != current_domains[i]["key"]:
-                    raise csv_error("Inconsistent symbol dimensions")
+        info = {}
+        info["name"] = s
+        info["dims"] = len(domains)
+        info["domain"] = []
+        for d in domains:
+            info["domain"].append({"key": d})
+        symbols.add_symbol(info)
 
     for row in reader:
         keys = row[0:len(domains)]
         for j in range(len(keys)):
             k = keys[j].strip()
-            gdxdict.add_UEL(symbols, k)
+            symbols.add_key(k)
             if domains[j] != "*":
-                if not domains[j] in symbols:
-                    symbols[domains[j]] = {}
-                    gdxdict.set_type(symbols, domains[j], "Set")
-                    gdxdict.set_dims(symbols, domains[j], "*")
                 if not k in symbols[domains[j]]:
                     symbols[domains[j]][k] = True
 
@@ -94,39 +86,43 @@ def insert_symbol(symbols, input_csv, stage):
                 k = keys[j].strip()
 
                 if j == len(keys)-1:
-                    gdxdict.add_UEL(symbols, k)
                     if value == "YES" or value == "NO":
                         if value == "YES":
                             symbol[k] = True
                         else:
                             if k in symbol: del symbol[k]
-                        gdxdict.set_type(symbols, name, "Set")
+                        symbols.set_type(name, "Set")
                     else:
                         symbol[k] = float(value)
-                        gdxdict.set_type(symbols, name, "Parameter")
+                        symbols.set_type(name, "Parameter")
                     if row_description:
-                        if not "__desc" in symbol:
-                            symbol["__desc"] = {}
-                        symbol["__desc"][k] = row_description
+                        symbol.setinfo(k)["description"] = row_description
                 else:
                     if not k in symbol:
-                        symbol[k] = {}
+                        symbol[k] = gdxdict.gdxdim(symbols)
                     symbol = symbol[k]
+
+    for n in symbol_names:
+        name = n.strip()
+        if not "typename" in symbols.getinfo(name):
+            symbols.set_type(name, "Parameter")
+
+    if description:
+        symbols.setinfo(symbol_names[0])["description"] = description
 
 
 def insert_symbols(input_csvs, input_gdx=None, output_gdx=None, gams_dir=None):
     if output_gdx == None: output_gdx = input_gdx
 
+    symbols = gdxdict.gdxdict()
     if input_gdx:
-        symbols = gdxdict.read(input_gdx, gams_dir)
-    else:
-        symbols = gdxdict.new()
+        symbols.read(input_gdx, gams_dir)
 
     for i in range(1,5):
         for c in input_csvs:
             insert_symbol(symbols, c, i)
 
-    gdxdict.write(symbols, output_gdx, gams_dir)
+    symbols.write(output_gdx, gams_dir)
 
 
 #- main ------------------------------------------------------------------------
@@ -152,7 +148,7 @@ Insert data in a csv file into a gdx file.
         output_gdx = options.output
         if not output_gdx:
             if not input_gdx:
-                parse.error("If you don't specify an input GDX, you must specify an output file name")
+                parser.error("If you don't specify an input GDX, you must specify an output file name")
             else:
                 output_gdx = input_gdx
         if options.directories:
