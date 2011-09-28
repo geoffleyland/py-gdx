@@ -242,7 +242,7 @@ class gdxdict:
         self.universal = {}
         self.universal_info = {}
         self.order = []
-        self.universal_description = []
+        self.universal_description = {}
 
         self.symbols = {}
         self.symbol_names = {}
@@ -300,8 +300,7 @@ class gdxdict:
         if not kl in self.universal:
             self.universal[kl] = len(self.order)
             self.order.append(key)
-        if description:
-            self.universal_description[self.universal[kl]] = description
+        self.universal_description[kl] = description
 
     def add_symbol(self, info):
         key = info["name"].lower()
@@ -449,7 +448,7 @@ class gdxdict:
 
     def merge_UELs(self, G2):
         for i in range(len(G2.order)):
-            self.add_key(G2.order[i], G2.universal_description[i])
+            self.add_key(G2.order[i], G2.universal_description[G2.order[i].lower()])
 
 
 #- EOF -------------------------------------------------------------------------
