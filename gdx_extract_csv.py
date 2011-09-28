@@ -277,8 +277,8 @@ Denmark, 70032, 124781
     parser.add_option("-d", "--directory", help="Add a directory to read several gdx files from", action="append", dest="directories")
     parser.add_option("-s", "--symbol", help="Add a symbol to the report", action="append", dest="symbols")
     parser.add_option("-D", "--domain", help="Add a domain to the report", action="append", dest="domains")
-    parser.add_option("-a", "--all", help="Write all symbols", action="store_true")
-    parser.add_option("-o", "--output", help="Where to write the output csv file (default is to the console)", default=None)
+    parser.add_option("-a", "--all", help="Write all symbols.  When you choose --all, you must specify an output file *prefix* with -o.  Each symbol in the gdx file will be written as a csv file named <prefix><symbol_name>.csv.  If prefix is a directory name (ie 'dir\\' on windows or 'dir/' on *nix), then any intermediate directories will be created", action="store_true")
+    parser.add_option("-o", "--output", help="Where to write the output csv file (default is to the console), or the output file prefix if --all is used", default=None)
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
 
     try:
