@@ -124,7 +124,7 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
         csvout.writerow(csvrow)
 
 
-def read_files(files, gams_dir=None):
+def read_files_separately(files, gams_dir=None):
     filesymbols = {}
     symbols1 = None
 
@@ -141,9 +141,23 @@ def read_files(files, gams_dir=None):
     return filesymbols, symbols1
 
 
-def write_symbol_report(files, symbol_names, output=None, gams_dir=None):
-    filesymbols, symbols1 = read_files(files, gams_dir)
+def read_files_combined(files, gams_dir=None):
+    filesymbols = {}
+    symbols1 = None
 
+    G = gdxdict.gdxdict()
+
+    # Read all the symbols from all the files
+    for f in files:
+        G.read(f, gams_dir)
+        if not symbols1:
+            symbols1 = G
+            filesymbols[f] = G
+
+    return filesymbols, symbols1
+
+
+def write_symbol_report(symbols, filesymbols, symbol_names, output=None):
     # Check the domains of all the symbols
     potential_domains = []
     for sn in symbol_names:
@@ -182,12 +196,10 @@ def write_symbol_report(files, symbol_names, output=None, gams_dir=None):
                 smallest_set = s
         domains.append(smallest_set)
 
-    write_report(filesymbols, symbols1, domains, symbol_names, output)
+    write_report(filesymbols, symbols, domains, symbol_names, output)
 
 
-def write_domain_report(files, domains, output=None, gams_dir=None):
-    filesymbols, symbols1 = read_files(files, gams_dir)
-
+def write_domain_report(symbols, filesymbols, domains, output=None):
     possible_symbols = {}
     for f in filesymbols:
         for k in filesymbols[f]:
@@ -221,15 +233,13 @@ def write_domain_report(files, domains, output=None, gams_dir=None):
     symbol_names = []
     for s in possible_symbols: symbol_names.append(s)    
 
-    write_report(filesymbols, symbols1, domains, symbol_names, output)
+    write_report(filesymbols, symbols, domains, symbol_names, output)
 
 
-def write_all_reports(files, output, gams_dir=None):
+def write_all_reports(symbols, filesymbols, output):
     try: os.makedirs(os.path.dirname(output))
     except:
         pass
-    
-    filesymbols, symbols = read_files(files, gams_dir)
 
     universal_file = open(output+"__universal.csv", "w")
     universal_file.write("(*)\n")
@@ -276,7 +286,8 @@ Denmark, 70032, 124781
     parser.add_option("-f", "--file", help="Add a gdx file to read from", action="append", dest="files")
     parser.add_option("-d", "--directory", help="Add a directory to read several gdx files from", action="append", dest="directories")
     parser.add_option("-s", "--symbol", help="Add a symbol to the report", action="append", dest="symbols")
-    parser.add_option("-D", "--domain", help="Add a domain to the report", action="append", dest="domains")
+    parser.add_option("-i", "--index", help="Add a index (domain, dimension) to the report", action="append", dest="domains")
+    parser.add_option("-c", "--compare", help="Compare symbols from all the files, rather than combining the files and reporting on the amalgamation")
     parser.add_option("-a", "--all", help="Write all symbols.  When you choose --all, you must specify an output file *prefix* with -o.  Each symbol in the gdx file will be written as a csv file named <prefix><symbol_name>.csv.  If prefix is a directory name (ie 'dir\\' on windows or 'dir/' on *nix), then any intermediate directories will be created", action="store_true")
     parser.add_option("-o", "--output", help="Where to write the output csv file (default is to the console), or the output file prefix if --all is used", default=None)
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory if it isn't found automatically", default=None)
@@ -318,12 +329,18 @@ Denmark, 70032, 124781
         else:
             outfile = sys.stdout
 
-        if options.all:
-            write_all_reports(files, outfile, options.gams_dir)
-        elif options.domains:
-            write_domain_report(files, options.domains, outfile, options.gams_dir)
+        if options.compare:
+            filesymbols, symbols = read_files_separately(files, options.gams_dir)
         else:
-            write_symbol_report(files, options.symbols, outfile, options.gams_dir)
+            filesymbols, symbols = read_files_combined(files, options.gams_dir)
+            
+            
+        if options.all:
+            write_all_reports(symbols, filesymbols, outfile)
+        elif options.domains:
+            write_domain_report(symbols, filesymbols, options.domains, outfile)
+        else:
+            write_symbol_report(symbols, filesymbols, options.symbols, outfile)
 
     except (optparse.OptionError, TypeError), err:
         print >>sys.stderr, err
