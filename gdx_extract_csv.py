@@ -161,7 +161,7 @@ def write_symbol_report(symbols, filesymbols, symbol_names, output=None):
     # Check the domains of all the symbols
     potential_domains = []
     for sn in symbol_names:
-        for f in files:
+        for f in filesymbols:
             info = filesymbols[f].getinfo(sn)
             for d in range(info["dims"]):
                 if d >= len(potential_domains):
@@ -169,13 +169,19 @@ def write_symbol_report(symbols, filesymbols, symbol_names, output=None):
                     potential_domains.append(pd)
                     for a in info["domain"][d]["ancestors"]:
                         if a != "*" or len(info["domain"][d]["ancestors"]) == 1:
-                            pd[a] = filesymbols[f].getinfo(a)["records"]
+                            if a == "*":
+                                pd[a] = len(symbols.universal)
+                            else:
+                                pd[a] = filesymbols[f].getinfo(a)["records"]
                 else:
                     pd = potential_domains[d]
                     sd = {}
                     for a in info["domain"][d]["ancestors"]:
                         if a != "*" or len(info["domain"][d]["ancestors"]) == 1:
-                            sd[a] = filesymbols[f].getinfo(a)["records"]
+                            if a == "*":
+                                sd[a] = pd[a] = len(symbols.universal)
+                            else:
+                                sd[a] = filesymbols[f].getinfo(a)["records"]
                     remove = []
                     for a in pd:
                         if a in sd:
