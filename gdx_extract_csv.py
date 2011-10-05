@@ -312,6 +312,10 @@ Denmark, 70032, 124781
                     if f.endswith(".gdx"):
                         files = files + [os.path.join(d, f)]
 
+        for i in range(len(files)):
+            if not files[i].lower().endswith(".gdx"):
+                files[i] = files[i] + ".gdx"
+
         if len(files) == 0:
             parser.error("No files or directories specified (try python %s --help)" % args[0])
 

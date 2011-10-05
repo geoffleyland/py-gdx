@@ -39,7 +39,11 @@ def main(argv=None):
         output_gdx = options.output
         if not output_gdx:
             output_gdx = input_gdxes[0]
-        
+
+        for i in range(input_gdxes):
+            if not input_gdxes[i].lower().endswith(".gdx"):
+                input_gdxes[i] += ".gdx"
+
         print "Reading from %s and writing to '%s'" % (input_gdxes, output_gdx)
         
         merge_gdx(input_gdxes, output_gdx, options.gams_dir)

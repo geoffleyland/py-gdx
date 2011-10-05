@@ -51,6 +51,10 @@ Parameter daynumber(days)
         if len(args) < 2:
             parser.error("Wrong number of arguments (try python %s --help)" % args[0])
 
+        for i in range(1, len(args)):
+            if not args[i].lower().endswith(".gdx"):
+                args[i] += ".gdx"
+
         list_symbols(args[1:], options.gams_dir)
 
     except (optparse.OptionError, TypeError), err:
