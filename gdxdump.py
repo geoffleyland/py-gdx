@@ -31,8 +31,8 @@ def dump_GDX_file(H, filename):
         if sinfo["dims"] > 0:
             dim_string = "("
             for j in sinfo["domain"]:
-                if j > 0: dim_string += ","
-                d = sinfo["domain"][j]
+                if j["index"] > 0: dim_string += ","
+                d = sinfo["domain"][j["index"]]
                 dim_string += d["key"]
             dim_string += ")"
         desc = sinfo["description"]
@@ -72,7 +72,8 @@ def main(argv=None):
     parser = optparse.OptionParser(usage = "%prog [options] <input gdx>")
     parser.add_option("-g", "--gams-dir", help="Specify the GAMS installation directory", default=None)
 
-    try:
+    if True:
+#    try:
         options, args = parser.parse_args(argv)
 
         if len(args) != 2:
@@ -80,16 +81,16 @@ def main(argv=None):
 
         H = gdxx.open(options.gams_dir)
         dump_GDX_file(H, args[1])
-
-    except (optparse.OptionError, TypeError), err:
-        print >>sys.stderr, err
-        return 2
-    except gdxx.GDX_error, err:
-        print >>sys.stderr, "GDX Error: %s" % err.msg
-        if err.msg == "Couldn't find the GAMS system directory":
-            print "  Try specifying where GAMS is with the -g option"
-        return 2
-
+#
+#    except (optparse.OptionError, TypeError), err:
+#        print >>sys.stderr, err
+#        return 2
+#    except gdxx.GDX_error, err:
+#        print >>sys.stderr, "GDX Error: %s" % err.msg
+#        if err.msg == "Couldn't find the GAMS system directory":
+#            print "  Try specifying where GAMS is with the -g option"
+#        return 2
+#
     return 1
 
 
