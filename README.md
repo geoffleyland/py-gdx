@@ -25,11 +25,11 @@ At the moment, documentation of `gdxdict.py` is limited to the example files.
 - a "recent" version of GAMS or at least the GDX library - GAMS 23.2 does not have Python bindings, 23.7 does.
 - Python 2.6 - the GDX bindings do not seem to support Python 3 or 2.7.
 - you must have followed the installation instructions for Python in `<gams-dir>\apifiles\readme.txt`
-  - make sure you have the right bindings to your Python version
-  - make sure that the relevant files (`gdxcc.dll` (or equivalent) and
+  - make sure you have the right bindings for your Python version
+  - make sure that the relevant files (`gdxcc.[so,dll]` and
     `gdxcc.py` are either installed in your python `site-packages` directory
-    or the path to the files is in your PythonPath - on Windows this is like
-    `\C:\Program Files\GAMS23.7\apifiles\gdx`
+    or the path to the files is in your PythonPath (on Windows they'll be
+    somewhere like `C:\Program Files\GAMS23.7\apifiles\gdx`)
 
 
 ## 3. Who?
