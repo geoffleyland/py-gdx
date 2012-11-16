@@ -31,6 +31,11 @@ At the moment, documentation of `gdxdict.py` is limited to the example files.
     or the path to the files is in your PythonPath (on Windows they'll be
     somewhere like `C:\Program Files\GAMS23.7\apifiles\gdx`)
 
+In short, if `python <gams-dir>\apifiles\Python\example1.py <gams-dir>`
+doesn't work, then py-gdx won't work either.  You need to install the
+GAMS/Python bindings correctly.
+Either ask GAMS for help, or use Lua.
+
 
 ## 3. Who?
 
