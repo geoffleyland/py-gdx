@@ -343,8 +343,7 @@ Denmark, 70032, 124781
             filesymbols, symbols = read_files_separately(files, options.gams_dir)
         else:
             filesymbols, symbols = read_files_combined(files, options.gams_dir)
-            
-            
+
         if options.all:
             write_all_reports(symbols, filesymbols, outfile)
         elif options.domains:

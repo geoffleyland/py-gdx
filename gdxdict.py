@@ -150,41 +150,25 @@ def write_symbol(H, typename, userinfo, s, dims):
 
 #- Guessing domains ------------------------------------------------------------
 
-def visit_domains(current, keys, dims, index):
-    for k in current:
-        keys[index][k] = True
-        v = current[k]
-        if index < dims-1:
-            visit_domains(v, keys, dims, index+1)
-
-
-def guess_domains(G):
+def guess_domains(G, set_map, all_keys):
     # We don't always get symbol domains from GDX (in 23.7.2 and below
     # gdxSymbolGetDomain doesn't work and otherwise, some GDX files don't seem
     # to contain this information).  So here we try to guess
-
-    # First, find all the symbols in all the one-dimensional sets, but map
-    # backwards so we have a map from every set key back to all the sets it's in
-    set_map = {}
-    for k in G:
-        info = G.getinfo(k)
-        if info["type"] == gdxcc.GMS_DT_SET and info["dims"] == 1:
-            symbol = G[k]
-            for e in symbol:
-                if not e in set_map:
-                    set_map[e] = {}
-                set_map[e][k] = True
 
     # Then run through all the symbols trying to guess any missing domains
     for k in G:
         info = G.getinfo(k)
         if info["dims"] > 0:
-            keys = [{} for i in range(info["dims"])]
-            # Enumerate all the keys the symbol uses on each of its dimensions
-            visit_domains(G[k], keys, info["dims"], 0)
+            skip = True
+            for i in range(info["dims"]):
+                if info["domain"][i]["key"] == "*": skip = False
+            if skip: continue
+
+            keys = all_keys[k]
+
             for i in range(info["dims"]):
                 if info["domain"][i]["key"] != "*": continue
-                # For each dimension that currently has '*' as it's domain,
+                # For each dimension that currently has '*' as its domain,
                 # work out all the possible sets
                 pd = None
                 for j in keys[i]:
@@ -377,11 +361,41 @@ class gdxdict:
             if ret == 0: description = None
             self.add_key(key, description)
 
+        all_keys = {}
+
+        # Read all the 1-D sets
+        # Map backwards so we have a map from every set key back to all the sets it's in
+        set_map = {}
+        for i in range(1, info["symbol_count"]+1):
+            sinfo = gdxx.symbol_info(H, i)
+            if sinfo["typename"] == "Set" and sinfo["dims"] == 1:
+
+                self.add_symbol(sinfo)
+                symbol_name = sinfo["name"]
+                all_keys[symbol_name] = [{}]
+                keys = all_keys[symbol_name]
+                symbol = self[symbol_name]
+                ok, records = gdxcc.gdxDataReadStrStart(H, i)
+                for i in range(records):
+                    ok, elements, values, afdim = gdxcc.gdxDataReadStr(H)
+                    if not ok: raise gdxx.GDX_error(H, "Error in gdxDataReadStr")
+                    e = elements[0]
+                    read_symbol(H, symbol, e, sinfo["typename"], values)
+                    if not e in set_map: set_map[e] = {}
+                    set_map[e][symbol_name] = True
+                    keys[0][e] = True
+
         # Read all the other symbols
         for i in range(1, info["symbol_count"]+1):
 
             sinfo = gdxx.symbol_info(H, i)
+            if sinfo["typename"] == "Set" and sinfo["dims"] == 1: continue
+
             self.add_symbol(sinfo)
+            symbol_name = sinfo["name"]
+            all_keys[symbol_name] = []
+            keys = all_keys[symbol_name]
+            for d in range(sinfo["dims"]): keys.append({})
 
             ok, records = gdxcc.gdxDataReadStrStart(H, i)
         
@@ -389,24 +403,26 @@ class gdxdict:
                 ok, elements, values, afdim = gdxcc.gdxDataReadStr(H)
                 if not ok: raise gdxx.GDX_error(H, "Error in gdxDataReadStr")
                 if sinfo["dims"] == 0:
-                    read_symbol(H, self, sinfo["name"], sinfo["typename"], values)
+                    read_symbol(H, self, symbol_name, sinfo["typename"], values)
                 else:
                     symbol = self[sinfo["name"]]
                     current = symbol
                     for d in range(sinfo["dims"]-1):
                         key = elements[d]
+                        keys[d][key] = True
                         if not key in current:
                             current[key] = gdxdim(self)
                         current = current[key]
-                    key = elements[sinfo["dims"]-1]
+                    d = sinfo["dims"]-1
+                    key = elements[d]
+                    keys[d][key] = True
                     read_symbol(H, current, key, sinfo["typename"], values)
 
         gdxcc.gdxClose(H)
         gdxcc.gdxFree(H)
 
-        guess_domains(self)
+        guess_domains(self, set_map, all_keys)
         guess_ancestor_domains(self)
-
 
 
 #- Write a GDX file ------------------------------------------------------------
