@@ -20,33 +20,36 @@ class extract_error(Exception):
 
 #- Replace a parameter with the contents of a csv file -------------------------
 
-def write_value(v, header, values, address):
+def write_value(v, header, values, address_map, address):
     if not address:
         if type(v) == str:
-            address = v
+            address = (v, )
             v = True
         else:
-            address = ""
-    if not address in values:
-        values[address] = {}
-    values[address][header] = v
+            address = ("", )
+    a = ".".join(address)
+    if not a in values:
+        values[a] = {}
+    values[a][header] = v
+    address_map[a] = address
 
 
-def write_parameter(s, header, values, descriptions, stype="notset", address=None):
+def write_parameter(s, header, values, address_map, descriptions, stype="notset", address=None):
     if isinstance(s, gdxdict.gdxdim):
         for k in s:
             if address:
-                a2 = address + "." + k
+                a2 = address + (k, )
             else:
-                a2 = k
+                a2 = (k, )
             if "description" in s.getinfo(k):
-                if not a2 in descriptions:
-                    descriptions[a2] = {}
-                descriptions[a2][header] = s.getinfo(k)["description"]
-            write_parameter(s[k], header, values, descriptions, stype, a2)
+                a3 = ".".join(a2)
+                if not a3 in descriptions:
+                    descriptions[a3] = {}
+                descriptions[a3][header] = s.getinfo(k)["description"]
+            write_parameter(s[k], header, values, address_map, descriptions, stype, a2)
     else:
         if stype == "set": s = True
-        write_value(s, header, values, address)
+        write_value(s, header, values, address_map, address)
 
 
 def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
@@ -55,6 +58,7 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
     # Generate all the lines for the report
     header_map = {}
     values = {}
+    address_map = {}
     descriptions = {}
 
     for f in filesymbols:
@@ -70,20 +74,20 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
                 s = symbols[sn]
                 typename = symbols.getinfo(sn)["typename"]
                 if typename == "Set":
-                    write_parameter(s, header, values, descriptions, "set")
+                    write_parameter(s, header, values, address_map, descriptions, "set")
                 else:
-                    write_parameter(s, header, values, descriptions)
+                    write_parameter(s, header, values, address_map, descriptions)
 
     uel_dict = symbols1.universal
     rows = []
     for r in values:
-        names = r.split(".")
+        names = address_map[r]
         nums = ()
         for n in names:
             if n != "":
                 nums = nums + (uel_dict[n.lower()],)
             nums = nums + (1,)
-        rows.append((nums, r))
+        rows.append((nums, r, address_map[r]))
     rows.sort()
     headers = []
     for h in header_map: headers.append(h)
@@ -104,7 +108,7 @@ def write_report(filesymbols, symbols1, domains, symbol_names, output=None):
         csvrow = []
         name = r[1]
         if name != "":
-            csvrow += name.split(".")
+            csvrow += r[2]
         for h in headers:
             if name in values and h in values[name]:
                 v = values[name][h]
